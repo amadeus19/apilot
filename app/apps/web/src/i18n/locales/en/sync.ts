@@ -1,0 +1,73 @@
+/**
+ * Sync domain dictionary (en): wizard four-phase copy. Paired with the
+ * zh-CN file — keep both sides in sync.
+ * Params and request body are silently aligned inside the apply transaction
+ * (fill missing, drop extra, never touch filled values); no verdict UI.
+ */
+export const sync = {
+  wizard: {
+    title: 'Sync',
+    // Header top-right: last full-apply timestamp (local MM-DD HH:mm)
+    lastSyncedAt: 'Last sync {time}',
+    description: 'Fetch service docs, compare with the snapshot, then apply confirmed changes',
+    stepFetch: 'Fetch',
+    stepCompare: 'Compare',
+    stepConfirm: 'Review',
+    stepDone: 'Done',
+    selectTitle: 'Choose services to sync',
+    selectHint: 'Unselected services are skipped entirely this run',
+    selectAll: 'Select all',
+    selectFooterCount: '{selected} of {total} services selected',
+    noDocUrl: 'No doc URL · cannot sync',
+    startSync: 'Start sync · {count} services',
+    runActivity: 'Fetching · {name}',
+    runElapsed: 'elapsed',
+    runQueued: 'Queued',
+    runFetching: 'Fetching…',
+    runDiffing: 'Comparing…',
+    runOk: 'Done',
+    runSkipped: 'Skipped',
+    runCancelled: 'Cancelled',
+    cancelFetch: 'Cancel',
+    runningCloseHint: 'Closing cancels remaining fetches, nothing will be written',
+    allSkippedTitle: 'Every selected service was skipped',
+    allSkippedHint:
+      'No service was fetched successfully and nothing was written; check reachability and the doc URL, then sync again.',
+    retryButton: 'Retry',
+    skippedSection: 'Failed fetches · retry individually',
+    compareSelectedCount: '{checked} / {total} selected',
+    summarySecondary: '{unchanged} unchanged · {skipped} skipped',
+    promiseData: 'User test data is indexed by stable keys · sync never touches it',
+    previewBar: 'Preview only · nothing written yet',
+    groupAdded: 'Added',
+    groupChanged: 'Changed',
+    groupRemoved: 'Removed',
+    rowCheckLabel: 'Apply this endpoint',
+    changeChip: '+{added} −{removed} ~{changed}',
+    removedUsageCount: '{count} workflow(s) reference this',
+    applyButton: 'Apply · {count} changes',
+    applying: 'Applying…',
+    noChanges: 'Everything matches the snapshot · no changes',
+    noChangesSkippedTitle: '{services} services unchanged · {skipped} fetches failed',
+    closeHint: 'Close discards everything, nothing will be written',
+    closeWizardButton: 'Close wizard',
+    tabParams: 'Parameters',
+    tabBody: 'Body',
+    tabResponses: 'Responses',
+    schemaSection: 'Schema changes',
+    emptyTab: 'No changes in this tab',
+    diffLoading: 'Loading diff view…',
+    lightCardLabel: 'New endpoint',
+    lightCardParams: '{count} params',
+    lightCardBodyKeys: '{count} body keys',
+    lightCardResponses: '{count} responses',
+    keepCardTitle: 'User data preserved in place',
+    keepCardBody:
+      'Test data, pin and history of this endpoint are all kept; when it reappears it is imported again and these are reconnected',
+    doneTitle: 'Sync complete',
+    doneUnchanged: 'Unchanged',
+    doneBadgeNote:
+      'Tree badges were refreshed by this apply; badges of unapplied endpoints stay until they are applied',
+    finishButton: 'Done',
+  },
+} as const

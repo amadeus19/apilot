@@ -1,0 +1,6 @@
+# app 级虚拟 cargo workspace（ADR-0008）：产品 crate 结构不动（ADR-0006 单 crate 双 bin 维持），
+# workspace 仅用于收编演示靶机 demo-server——测试夹具定位，不入产品运行时依赖树与安装包。
+# Cargo.lock 与 target 目录落在本层：依赖单点解析、共享编译缓存。
+[workspace]
+resolver = "3"
+members = ["apps/web/src-tauri", "demo-server"]

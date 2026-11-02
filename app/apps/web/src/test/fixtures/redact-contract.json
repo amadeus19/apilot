@@ -1,0 +1,141 @@
+{
+  "description": "脱敏契约（前端 features/http/constants.ts ⇄ Rust domain/redact.rs＋cli 脱敏函数，双端钉住）：敏感头名单全集（存储形态＝小写，两端匹配均不区分大小写）＋头名判定用例＋URL query 掩码用例（键匹配不区分大小写，命中键的值替换为 ***，未命中键原样保留）＋Secret 消费值全文替换用例（不挑位置、空值跳过、放行跳过）。名单唯一演进通道：先改本夹具（双端测试同红）再双端内化；单边改任一端内化名单，该端测试立红（暴露单边漂移）",
+  "sensitiveHeaderNames": [
+    "authorization",
+    "proxy-authorization",
+    "cookie",
+    "set-cookie",
+    "x-api-key",
+    "api-key",
+    "x-auth-token",
+    "x-csrf-token",
+    "x-xsrf-token"
+  ],
+  "headerCases": [
+    { "name": "authorization", "sensitive": true },
+    { "name": "Authorization", "sensitive": true },
+    { "name": "AUTHORIZATION", "sensitive": true },
+    { "name": "Proxy-Authorization", "sensitive": true },
+    { "name": "COOKIE", "sensitive": true },
+    { "name": "Set-Cookie", "sensitive": true },
+    { "name": "x-api-key", "sensitive": true },
+    { "name": "X-Api-Key", "sensitive": true },
+    { "name": "API-KEY", "sensitive": true },
+    { "name": "X-Auth-Token", "sensitive": true },
+    { "name": "x-csrf-token", "sensitive": true },
+    { "name": "X-XSRF-Token", "sensitive": true },
+    { "name": "accept", "sensitive": false },
+    { "name": "Content-Type", "sensitive": false },
+    { "name": "user-agent", "sensitive": false },
+    { "name": "X-Custom-Header", "sensitive": false },
+    { "name": "apikey", "sensitive": false }
+  ],
+  "queryCases": [
+    {
+      "name": "小写键命中（基准）",
+      "url": "http://x.test/a?token=secret&verbose=1",
+      "keys": ["token"],
+      "masked": "http://x.test/a?token=***&verbose=1"
+    },
+    {
+      "name": "URL 键首字母大写、提示键小写仍命中",
+      "url": "http://x.test/a?Token=secret&verbose=1",
+      "keys": ["token"],
+      "masked": "http://x.test/a?Token=***&verbose=1"
+    },
+    {
+      "name": "URL 键小写、提示键大写仍命中（对称）",
+      "url": "http://x.test/a?token=secret&verbose=1",
+      "keys": ["Token"],
+      "masked": "http://x.test/a?token=***&verbose=1"
+    },
+    {
+      "name": "异形混合大小写键命中",
+      "url": "http://x.test/a?API_KEY=zzz&id=7",
+      "keys": ["api_key"],
+      "masked": "http://x.test/a?API_KEY=***&id=7"
+    },
+    {
+      "name": "多提示键分别命中、未命中键不掩",
+      "url": "http://x.test/a?Token=a&sig=b&cursor=c",
+      "keys": ["token", "sig"],
+      "masked": "http://x.test/a?Token=***&sig=***&cursor=c"
+    },
+    {
+      "name": "值内含 = 整段掩码",
+      "url": "http://x.test/a?token=abc=def",
+      "keys": ["token"],
+      "masked": "http://x.test/a?token=***"
+    },
+    {
+      "name": "无命中键原样",
+      "url": "http://x.test/a?verbose=1&page=2",
+      "keys": ["token"],
+      "masked": "http://x.test/a?verbose=1&page=2"
+    },
+    {
+      "name": "无 query 原样",
+      "url": "http://x.test/a",
+      "keys": ["token"],
+      "masked": "http://x.test/a"
+    }
+  ],
+  "secretValueCases": [
+    {
+      "name": "URL path 段任意位置全文替换",
+      "text": "http://x.test/v1/sk-live-123/a",
+      "values": ["sk-live-123"],
+      "show": false,
+      "masked": "http://x.test/v1/***/a"
+    },
+    {
+      "name": "头值前缀替换（Bearer 形态）",
+      "text": "Bearer sk-live-123",
+      "values": ["sk-live-123"],
+      "show": false,
+      "masked": "Bearer ***"
+    },
+    {
+      "name": "URL query 非键名位置同样替换（不挑位置的全文口径）",
+      "text": "http://x.test/a?tok=s3cr3t&v=1",
+      "values": ["s3cr3t"],
+      "show": false,
+      "masked": "http://x.test/a?tok=***&v=1"
+    },
+    {
+      "name": "多值逐一替换",
+      "text": "a=sk-1&b=sk-2",
+      "values": ["sk-1", "sk-2"],
+      "show": false,
+      "masked": "a=***&b=***"
+    },
+    {
+      "name": "同值多次出现全部替换",
+      "text": "sk-1 and sk-1",
+      "values": ["sk-1"],
+      "show": false,
+      "masked": "*** and ***"
+    },
+    {
+      "name": "空值在清单不误命中字符边界",
+      "text": "abc",
+      "values": [""],
+      "show": false,
+      "masked": "abc"
+    },
+    {
+      "name": "空清单原样",
+      "text": "abc",
+      "values": [],
+      "show": false,
+      "masked": "abc"
+    },
+    {
+      "name": "放行跳过替换（--show-secrets 与显示明文同口径）",
+      "text": "Bearer sk-1",
+      "values": ["sk-1"],
+      "show": true,
+      "masked": "Bearer sk-1"
+    }
+  ]
+}

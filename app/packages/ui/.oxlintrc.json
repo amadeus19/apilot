@@ -1,0 +1,32 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react", "typescript", "oxc"],
+  "rules": {
+    "react/rules-of-hooks": "error",
+    "react/only-export-components": [
+      "warn",
+      {
+        "allowConstantExport": true
+      }
+    ],
+    "react/refs": "error",
+    "react/set-state-in-effect": "error",
+    "typescript/no-explicit-any": "error"
+  },
+  "overrides": [
+    {
+      "files": [
+        "src/components/display/badge.tsx",
+        "src/components/display/button.tsx",
+        "src/components/display/tabs.tsx",
+        "src/components/feedback/toast.tsx",
+        "src/components/display/toggle.tsx",
+        "src/components/display/toggle-group.tsx",
+        "src/components/ui-text.tsx"
+      ],
+      "rules": {
+        "react/only-export-components": "off"
+      }
+    }
+  ]
+}

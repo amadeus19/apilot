@@ -1,0 +1,733 @@
+{
+  "commands": [
+    {
+      "id": "project.info.ok",
+      "command": "project info",
+      "args": ["--json"],
+      "envelope": "data",
+      "exit": 0,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "success": { "const": true },
+          "data": {
+            "type": "object",
+            "keys": {
+              "name": { "type": "string" },
+              "baseUrl": { "type": "string", "nullable": true },
+              "apis": { "type": "number" },
+              "workflows": { "type": "number" },
+              "environments": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "project.info.workspaceMissing",
+      "command": "project info",
+      "args": ["--workspace", "不存在的空间", "--json"],
+      "envelope": "error",
+      "exit": 2,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "success": { "const": false },
+          "error": {
+            "type": "object",
+            "keys": {
+              "code": { "const": "INVALID_ARGUMENT" },
+              "message": { "type": "string" },
+              "details": { "type": "null" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "api.list.ok",
+      "command": "api list",
+      "args": ["--json"],
+      "envelope": "data",
+      "exit": 0,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "success": { "const": true },
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "keys": {
+                "id": { "type": "string" },
+                "name": { "type": "string" },
+                "method": { "type": "string" },
+                "path": { "type": "string" },
+                "service": { "type": "string" },
+                "category": { "type": "string", "nullable": true },
+                "pinned": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "api.list.workspaceMissing",
+      "command": "api list",
+      "args": ["--workspace", "不存在的空间", "--json"],
+      "envelope": "error",
+      "exit": 2,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "success": { "const": false },
+          "error": {
+            "type": "object",
+            "keys": {
+              "code": { "const": "INVALID_ARGUMENT" },
+              "message": { "type": "string" },
+              "details": { "type": "null" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "api.search.ok",
+      "command": "api search",
+      "args": ["用户", "--json"],
+      "envelope": "data",
+      "exit": 0,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "success": { "const": true },
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "keys": {
+                "id": { "type": "string" },
+                "name": { "type": "string" },
+                "method": { "type": "string" },
+                "path": { "type": "string" },
+                "service": { "type": "string" },
+                "category": { "type": "string", "nullable": true },
+                "pinned": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "api.search.blankKeyword",
+      "command": "api search",
+      "args": ["", "--json"],
+      "envelope": "error",
+      "exit": 2,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "success": { "const": false },
+          "error": {
+            "type": "object",
+            "keys": {
+              "code": { "const": "INVALID_ARGUMENT" },
+              "message": { "type": "string" },
+              "details": { "type": "null" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "api.get.ok",
+      "command": "api get",
+      "args": ["{API_USERS_ID}", "--json"],
+      "envelope": "data",
+      "exit": 0,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "success": { "const": true },
+          "data": {
+            "type": "object",
+            "keys": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "method": { "type": "string" },
+              "path": { "type": "string" },
+              "service": { "type": "string" },
+              "category": { "type": "string", "nullable": true },
+              "manual": { "type": "boolean" },
+              "params": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "keys": {
+                    "name": { "type": "string" },
+                    "value": { "type": "string" }
+                  }
+                }
+              },
+              "headers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "keys": {
+                    "name": { "type": "string" },
+                    "value": { "type": "string" }
+                  }
+                }
+              },
+              "body": { "type": "string", "nullable": true }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "api.get.notFound",
+      "command": "api get",
+      "args": ["{ENDPOINT_MISSING_ID}", "--json"],
+      "envelope": "error",
+      "exit": 3,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "success": { "const": false },
+          "error": {
+            "type": "object",
+            "keys": {
+              "code": { "const": "ENDPOINT_NOT_FOUND" },
+              "message": { "type": "string" },
+              "details": { "type": "null" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "api.run.ok",
+      "command": "api run",
+      "args": ["{API_USERS_ID}", "--query", "page=2", "--json"],
+      "envelope": "topLevel",
+      "exit": 0,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "success": { "const": true },
+          "runId": { "type": "string" },
+          "request": {
+            "type": "object",
+            "keys": {
+              "method": { "type": "string" },
+              "url": { "type": "string" },
+              "headers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "keys": {
+                    "name": { "type": "string" },
+                    "value": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "response": {
+            "type": "object",
+            "keys": {
+              "status": { "type": "number" },
+              "durationMs": { "type": "number", "nullable": true },
+              "headers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "keys": {
+                    "name": { "type": "string" },
+                    "value": { "type": "string" }
+                  }
+                }
+              },
+              "body": {
+                "type": "object",
+                "keys": {
+                  "excerpt": { "type": "string" },
+                  "truncated": { "type": "boolean" },
+                  "totalSize": { "type": "number" },
+                  "contentType": { "type": "string", "nullable": true }
+                }
+              }
+            }
+          },
+          "extracted": { "type": "object", "keys": {} },
+          "assertions": { "type": "array", "items": { "type": "any" } }
+        }
+      }
+    },
+    {
+      "id": "api.run.timedOut",
+      "command": "api run",
+      "args": ["{API_SLOW_ID}", "--json"],
+      "envelope": "error",
+      "exit": 4,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "success": { "const": false },
+          "error": {
+            "type": "object",
+            "keys": {
+              "code": { "const": "TIMEOUT" },
+              "message": { "type": "string" },
+              "details": { "type": "null" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "workflow.list.ok",
+      "command": "workflow list",
+      "args": ["--json"],
+      "envelope": "data",
+      "exit": 0,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "success": { "const": true },
+          "data": {
+            "type": "object",
+            "keys": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "keys": {
+                    "id": { "type": "string" },
+                    "name": { "type": "string" },
+                    "groupId": { "type": "string", "nullable": true },
+                    "lastStatus": { "type": "string", "nullable": true },
+                    "hasWriteback": { "type": "boolean" },
+                    "updatedAt": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "workflow.list.workspaceMissing",
+      "command": "workflow list",
+      "args": ["--workspace", "不存在的空间", "--json"],
+      "envelope": "error",
+      "exit": 2,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "success": { "const": false },
+          "error": {
+            "type": "object",
+            "keys": {
+              "code": { "const": "INVALID_ARGUMENT" },
+              "message": { "type": "string" },
+              "details": { "type": "null" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "workflow.get.ok",
+      "command": "workflow get",
+      "args": ["{WF_SENSITIVE_ID}", "--json"],
+      "envelope": "data",
+      "exit": 0,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "success": { "const": true },
+          "data": {
+            "type": "object",
+            "keys": {
+              "id": { "type": "string" },
+              "workspaceId": { "type": "string" },
+              "name": { "type": "string" },
+              "graph": {
+                "type": "object",
+                "keys": {
+                  "schemaVersion": { "type": "number" },
+                  "nodes": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "keys": {
+                        "id": { "type": "string" },
+                        "name": { "type": "string" },
+                        "position": {
+                          "type": "object",
+                          "keys": {
+                            "x": { "type": "number" },
+                            "y": { "type": "number" }
+                          }
+                        },
+                        "config": { "type": "any" }
+                      }
+                    }
+                  },
+                  "edges": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "keys": {
+                        "id": { "type": "string" },
+                        "source": { "type": "string" },
+                        "target": { "type": "string" },
+                        "label": { "type": "string", "nullable": true }
+                      }
+                    }
+                  }
+                }
+              },
+              "groupId": { "type": "string", "nullable": true },
+              "createdAt": { "type": "string" },
+              "updatedAt": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "workflow.get.notFound",
+      "command": "workflow get",
+      "args": ["{WF_MISSING_ID}", "--json"],
+      "envelope": "error",
+      "exit": 3,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "success": { "const": false },
+          "error": {
+            "type": "object",
+            "keys": {
+              "code": { "const": "WORKFLOW_NOT_FOUND" },
+              "message": { "type": "string" },
+              "details": { "type": "null" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "workflow.validate.ok",
+      "command": "workflow validate",
+      "args": ["{WF_LOGIN_ID}", "--json"],
+      "envelope": "topLevel",
+      "exit": 0,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "success": { "const": true },
+          "valid": { "const": true },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "keys": {
+                "code": { "type": "string" },
+                "nodeId": { "type": "string", "optional": true },
+                "message": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "workflow.validate.notFound",
+      "command": "workflow validate",
+      "args": ["{WF_MISSING_ID}", "--json"],
+      "envelope": "error",
+      "exit": 3,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "success": { "const": false },
+          "error": {
+            "type": "object",
+            "keys": {
+              "code": { "const": "WORKFLOW_NOT_FOUND" },
+              "message": { "type": "string" },
+              "details": { "type": "null" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "workflow.run.ok",
+      "command": "workflow run",
+      "args": ["{WF_LOGIN_ID}", "--json"],
+      "envelope": "topLevel",
+      "exit": 0,
+      "provides": { "RUN_ID": "runId" },
+      "shape": {
+        "type": "object",
+        "keys": {
+          "success": { "const": true },
+          "runId": { "type": "string" },
+          "workflowId": { "type": "string" },
+          "status": { "const": "passed" },
+          "startedAt": { "type": "string" },
+          "completedAt": { "type": "string", "nullable": true },
+          "durationMs": { "type": "number", "nullable": true },
+          "errorCode": { "type": "string", "nullable": true },
+          "errorMessage": { "type": "string", "nullable": true },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "keys": {
+                "nodeId": { "type": "string" },
+                "status": { "type": "string" },
+                "startedAt": { "type": "string", "nullable": true },
+                "completedAt": { "type": "string", "nullable": true },
+                "durationMs": { "type": "number", "nullable": true },
+                "errorCode": { "type": "string", "nullable": true },
+                "errorMessage": { "type": "string", "nullable": true },
+                "output": { "type": "any" },
+                "request": {
+                  "type": "object",
+                  "nullable": true,
+                  "keys": {
+                    "method": { "type": "string" },
+                    "url": { "type": "string" }
+                  }
+                },
+                "response": {
+                  "type": "object",
+                  "nullable": true,
+                  "keys": {
+                    "status": { "type": "number" },
+                    "body": { "type": "string" }
+                  }
+                },
+                "writebacks": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "keys": {
+                      "key": { "type": "string" },
+                      "categoryName": { "type": "string" },
+                      "secret": { "type": "boolean" },
+                      "value": { "type": "string" }
+                    }
+                  }
+                },
+                "assertions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "keys": {
+                      "ruleKind": { "type": "string" },
+                      "path": { "type": "string", "nullable": true },
+                      "expected": { "type": "string", "nullable": true },
+                      "actual": { "type": "string" },
+                      "passed": { "type": "boolean" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "workflow.run.notExecutable",
+      "command": "workflow run",
+      "args": ["{WF_BROKEN_ID}", "--json"],
+      "envelope": "error",
+      "exit": 4,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "success": { "const": false },
+          "error": {
+            "type": "object",
+            "keys": {
+              "code": { "const": "WORKFLOW_NOT_EXECUTABLE" },
+              "message": { "type": "string" },
+              "details": {
+                "type": "object",
+                "keys": {
+                  "workflowId": { "type": "string" },
+                  "issues": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "keys": {
+                        "code": { "type": "string" },
+                        "nodeId": { "type": "string", "optional": true },
+                        "message": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "run.status.ok",
+      "command": "run status",
+      "args": ["{RUN_ID}", "--json"],
+      "envelope": "data",
+      "exit": 0,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "success": { "const": true },
+          "data": {
+            "type": "object",
+            "keys": {
+              "runId": { "type": "string" },
+              "workflowId": { "type": "string" },
+              "status": { "type": "string" },
+              "startedAt": { "type": "string" },
+              "completedAt": { "type": "string", "nullable": true },
+              "durationMs": { "type": "number", "nullable": true },
+              "errorCode": { "type": "string", "nullable": true }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "run.status.notFound",
+      "command": "run status",
+      "args": ["{WEXEC_MISSING_ID}", "--json"],
+      "envelope": "error",
+      "exit": 3,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "success": { "const": false },
+          "error": {
+            "type": "object",
+            "keys": {
+              "code": { "const": "RUN_NOT_FOUND" },
+              "message": { "type": "string" },
+              "details": { "type": "null" }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "exitCodes": {
+    "INTERNAL": 1,
+    "INVALID_ARGUMENT": 2,
+    "SETTINGS_UNKNOWN_KEY": 1,
+    "SETTINGS_VALUE_TOO_LARGE": 1,
+    "SETTINGS_KEY_LIMIT_EXCEEDED": 1,
+    "DB_OPEN_FAILED": 1,
+    "DB_CORRUPTED": 1,
+    "DB_MIGRATION_FAILED": 1,
+    "DB_QUERY_FAILED": 1,
+    "DB_BUSY": 1,
+    "IO_CREATE_DIR_FAILED": 1,
+    "IO_RESOLVE_PATH_FAILED": 1,
+    "IO_OPEN_PATH_FAILED": 1,
+    "CLI_PATH_REGISTRY_FAILED": 1,
+    "UPDATE_SOURCE_NOT_CONFIGURED": 1,
+    "UPDATE_SOURCE_UNREACHABLE": 1,
+    "UPDATE_MANIFEST_UNREADABLE": 1,
+    "UPDATE_MANIFEST_INVALID": 1,
+    "UPDATE_PACKAGE_UNREADABLE": 1,
+    "UPDATE_CHECKSUM_MISMATCH": 1,
+    "UPDATE_SIGNATURE_INVALID": 1,
+    "UPDATE_STAGE_WRITE_FAILED": 1,
+    "UPDATE_DOWNLOAD_TIMED_OUT": 1,
+    "UPDATE_INSTALL_FAILED": 1,
+    "UPDATE_DISCARD_FAILED": 1,
+    "TASK_KEY_EXISTS": 1,
+    "SHUTDOWN_IN_PROGRESS": 1,
+    "NAME_INVALID": 1,
+    "URL_INVALID": 1,
+    "WORKSPACE_NOT_FOUND": 3,
+    "SERVICE_NOT_FOUND": 3,
+    "CATEGORY_NOT_FOUND": 1,
+    "ENDPOINT_NOT_FOUND": 3,
+    "ENDPOINT_AMBIGUOUS": 3,
+    "PERMISSION_DENIED": 5,
+    "INVALID_HTTP_METHOD": 1,
+    "INVALID_PATH_TEMPLATE": 1,
+    "USER_DATA_TOO_LARGE": 1,
+    "SESSION_TOO_LARGE": 1,
+    "IMPORT_FETCH_FAILED": 1,
+    "IMPORT_PAGE_UNRECOGNIZED": 1,
+    "SYNC_SERVICE_UNREACHABLE": 1,
+    "SYNC_BAD_SWAGGER": 1,
+    "SYNC_NO_SNAPSHOT": 1,
+    "WORKFLOW_NOT_FOUND": 3,
+    "WORKFLOW_GRAPH_INVALID": 1,
+    "WORKFLOW_NOT_EXECUTABLE": 4,
+    "WORKFLOW_ALREADY_RUNNING": 1,
+    "WORKFLOW_EXTRACT_SOURCE_INVALID": 1,
+    "WORKFLOW_EXTRACT_EVAL_FAILED": 1,
+    "WORKFLOW_ASSERT_SOURCE_INVALID": 1,
+    "WORKFLOW_ASSERT_FAILED": 1,
+    "WORKFLOW_CONDITION_EVAL_FAILED": 1,
+    "WORKFLOW_BRANCH_EDGE_MISSING": 1,
+    "WORKFLOW_JOIN_INVALID": 1,
+    "WORKFLOW_GROUP_NAME_EXISTS": 1,
+    "WORKFLOW_IMPORT_VERSION_UNSUPPORTED": 1,
+    "WORKFLOW_EXPORT_WRITE_FAILED": 1,
+    "VARIABLE_CATEGORY_NOT_FOUND": 1,
+    "VARIABLE_NOT_FOUND": 1,
+    "VARIABLE_KEY_DUPLICATE": 1,
+    "VARIABLE_CATEGORY_NOT_ACTIVATABLE": 1,
+    "BASE_URL_CANDIDATE_DUPLICATE": 1,
+    "BASE_URL_CANDIDATE_NOT_FOUND": 1,
+    "BACKUP_EXPORT_WRITE_FAILED": 1,
+    "BACKUP_INVALID_ZIP": 1,
+    "BACKUP_INVALID_DB": 1,
+    "BACKUP_SCHEMA_NEWER": 1,
+    "BACKUP_RESTORE_WRITE_FAILED": 1,
+    "BACKUP_FILE_LOCKED": 1,
+    "CANCELLED": 130,
+    "TIMEOUT": 4,
+    "NOT_IMPLEMENTED": 2,
+    "RUN_NOT_FOUND": 3,
+    "HTTP_REQUEST_FAILED": 4,
+    "HTTP_SYNTHESIS_INVALID": 4
+  },
+  "vocab": {
+    "executionStatus": ["passed", "failed", "cancelled", "skipped"],
+    "issueCodes": [
+      "missingStart",
+      "orphanNode",
+      "invalidEdge",
+      "cycle",
+      "conditionDefaultMissing",
+      "parallelNoBranch",
+      "joinNoUpstream",
+      "requestUnbound",
+      "requestInvalidRef",
+      "expressionInvalid",
+      "variableRefInvalid",
+      "upstreamNotRequest",
+      "extractRowInvalid",
+      "extractWritebackIncomplete",
+      "nodeReferenceAmbiguous"
+    ]
+  }
+}

@@ -1,0 +1,449 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+@source "../../../apps/**/*.{ts,tsx}";
+@source "../../../components/**/*.{ts,tsx}";
+@source "../**/*.{ts,tsx}";
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-selection: var(--selection);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --color-success-foreground: var(--success-foreground);
+  --color-success: var(--success);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  /* HTTP 方法语义色（全项目恒定，不随强调色变化）；GET 绿 / POST 蓝 /
+       PUT 橙黄 / DELETE 红 / PATCH 紫 / 少用方法灰 */
+  --color-method-get: var(--method-get);
+  --color-method-post: var(--method-post);
+  --color-method-put: var(--method-put);
+  --color-method-delete: var(--method-delete);
+  --color-method-patch: var(--method-patch);
+  --color-method-misc: var(--method-misc);
+  /* 方法浅底色（地址栏方法徽章：浅背景＋深字形态），由各主题字级方法色
+       与承载面按 oklab 低比例派生——字色调色时底色自动跟随，无需双份维护 */
+  --color-method-get-bg: var(--method-get-bg);
+  --color-method-post-bg: var(--method-post-bg);
+  --color-method-put-bg: var(--method-put-bg);
+  --color-method-delete-bg: var(--method-delete-bg);
+  --color-method-patch-bg: var(--method-patch-bg);
+  --color-method-misc-bg: var(--method-misc-bg);
+  /* 工作流画布表面与画布对象（节点卡）令牌：画布＝凹于面板一档的平面，
+       节点卡＝最亮层，两者靠明度阶梯＋细边＋浅投影区分层次 */
+  --color-canvas: var(--canvas);
+  --color-canvas-dot: var(--canvas-dot);
+  --color-canvas-edge: var(--canvas-edge);
+  --color-node-line: var(--node-line);
+  --color-node-line-strong: var(--node-line-strong);
+  --color-node-head-request: var(--node-head-request);
+  --color-node-head-data: var(--node-head-data);
+  --color-node-head-logic: var(--node-head-logic);
+  --color-node-head-neutral: var(--node-head-neutral);
+  --shadow-node: var(--node-shadow);
+  --shadow-node-raised: var(--node-shadow-raised);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei UI", system-ui,
+    sans-serif;
+  /* 语义字号档（与 Tailwind 默认档并用）：树/列表行、微注/功能芯片、装饰性专用 */
+  --text-row: 13px;
+  --text-micro: 11px;
+  --text-deco: 10px;
+  /* 等宽字体栈（Windows 优先）：版本号 / 方法徽章 / 等宽场景 */
+  --font-mono: ui-monospace, "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  /* 悬停底：比 --secondary 深一档，对 --sidebar(0.985) 达 1.09:1。浅色下悬停
+       反馈必须可辨——0.97 档与面板底色的差仅 1.05:1，肉眼等同无反馈 */
+  --muted: oklch(0.955 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  /* 主题浅色两档，由同一个百分比派生——只改下面那一行的 12% 即可整体改档：
+       --selection＝当前项（树选中行 / 导航激活项，另有左侧 2px 强调条）；
+       --accent＝全部交互表面的悬停 / 展开 / 按下 / 开启态（菜单项、按钮、标签、
+       面包屑、树行…）。--accent 是 shadcn 的「交互表面」令牌，指着它即等于把
+       全应用的悬停一次改档，不必逐处改 class。
+       12% 档实测：当前项对面板 1.17:1 / 对菜单栏 1.12:1，悬停 1.12:1 / 1.08:1
+       （对照：原中性灰悬停 1.09:1）。
+       两个值都只在本元素声明——.dark 与 data-accent 都挂在 :root 上、var 在此
+       解析，预设与明暗切换自动重解析（.dark 里不要再写一份 --accent）。
+       混合基准取 --card 而非 --background：浅色下两者同值（#fff，观感不变），
+       深色下 card（#171717）才是菜单 / 弹层的承载面，而面板 --background
+       （#0a0a0a）更暗——以面板为基准算出的深色款落到菜单栏上仅 1.01:1、等于
+       不可见；换 card 后深色对菜单栏 1.16:1、对面板 1.29:1，两级表面都成立。
+       混合空间必须用 oklab 而非 oklch：白色的色相会被当作 0 参与 oklch 的色相
+       插值（82% 权重），实测 indigo(258°) 的浅色款被拉到 341.64°、渲染成粉色
+       （Chromium 153 实测：in oklch → oklch(0.91828 0.0288 341.64)，in oklab →
+       色相保持 258）。oklab 是直角坐标混合，无色相旋回问题 */
+  --selection: color-mix(in oklab, var(--primary) 12%, var(--card));
+  --accent: color-mix(in oklab, var(--selection) 75%, var(--card));
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  /* 危险面前景：实底红上的按钮字色/图标色（关闭键 hover 等），与
+       primary-foreground 同值；深色 destructive 亮度较高，白色图标对比
+       ≈3:1，满足非文本图形 3:1 基线 */
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+  /* 状态语义色（扩展令牌，不随强调色变化）
+       浅色值经 WCAG AA 校验加深：success/get 0.55→0.53、warning 0.66→0.53，
+       对背景 ≥4.5:1（芯片小字基准）；warning 前景改白字（白字对实心面 5.36） */
+  --success: oklch(0.53 0.12 155);
+  --success-foreground: oklch(0.985 0 0);
+  --warning: oklch(0.53 0.13 70);
+  --warning-foreground: oklch(0.985 0 0);
+  /* 警示浅底（状态芯片形态：浅背景＋深字），派生口径同 method-*-bg */
+  --warning-bg: color-mix(in oklab, var(--warning) 13%, white);
+  /* HTTP 方法语义色（六色恒定）；浅色按 ≥4.5:1 加深：
+       post 0.58→0.55、put 0.68→0.55（Known Tension 点名项） */
+  --method-get: oklch(0.53 0.12 155);
+  --method-post: oklch(0.55 0.13 250);
+  --method-put: oklch(0.55 0.13 75);
+  --method-delete: oklch(0.58 0.19 27);
+  --method-patch: oklch(0.56 0.15 300);
+  --method-misc: oklch(0.52 0.01 255);
+  /* 方法浅底（白面板上混入约 13% 方法色，浅背景＋深字徽章的底） */
+  --method-get-bg: color-mix(in oklab, var(--method-get) 13%, white);
+  --method-post-bg: color-mix(in oklab, var(--method-post) 13%, white);
+  --method-put-bg: color-mix(in oklab, var(--method-put) 13%, white);
+  --method-delete-bg: color-mix(in oklab, var(--method-delete) 13%, white);
+  --method-patch-bg: color-mix(in oklab, var(--method-patch) 13%, white);
+  --method-misc-bg: color-mix(in oklab, var(--method-misc) 13%, white);
+  /* 工作流画布（浅色）：画布平面与窗口基底同为白（Postman Flow 式白底网点），
+       层次不靠压暗平面，而靠节点卡的细边＋浅投影＋分组色标题条。压暗画布会
+       让整页读作灰底，白底网点更接近工具软件的纸面感。
+       节点投影只服务「浮在平面上的对象」，与面板「边框优先、阴影只给弹层」
+       的分工不冲突——节点卡在画布语境里就是浮层。 */
+  --canvas: oklch(1 0 0);
+  /* 网点 0.75：白底上可辨的坐标参照（对齐 Postman Flows 纸面感）。单点色深
+       虽深于节点边框（node-line 0.918），但网点离散稀疏，整体权重仍弱于
+       围绕卡片整周的连续边框，层次不倒挂 */
+  --canvas-dot: oklch(0.75 0 0);
+  --canvas-edge: oklch(0.72 0 0);
+  --node-line: oklch(0.918 0 0);
+  --node-line-strong: oklch(0.82 0 0);
+  --node-shadow: 0 1px 2px oklch(0.2 0 0 / 6%), 0 4px 12px -4px oklch(0.2 0 0 / 10%);
+  --node-shadow-raised: 0 2px 6px oklch(0.2 0 0 / 8%), 0 12px 28px -6px oklch(0.2 0 0 / 14%);
+  /* 节点标题条分组色（派生令牌：底色随 card 与语义色自动重解析，明暗共用）。
+       分组色只做「这是哪一类节点」的低饱和提示，不承担状态编码 */
+  --node-head-request: color-mix(in oklab, var(--success) 8%, var(--card));
+  --node-head-data: color-mix(in oklab, var(--warning) 10%, var(--card));
+  --node-head-logic: color-mix(in oklab, var(--primary) 7%, var(--card));
+  --node-head-neutral: var(--muted);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  /* --accent（交互表面悬停）与 --selection（当前项）是派生令牌，见 :root——
+       这里不重复声明：两处取值会独立漂移 */
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+  --success: oklch(0.72 0.13 155);
+  --success-foreground: oklch(0.205 0 0);
+  --warning: oklch(0.78 0.12 75);
+  --warning-foreground: oklch(0.205 0 0);
+  /* 警示浅底（暗色＝混入 card 承载面，同 method-*-bg 深色口径） */
+  --warning-bg: color-mix(in oklab, var(--warning) 16%, var(--card));
+  /* HTTP 方法语义色深色套（提亮档；对深色基底 ≥4.5:1 已校验） */
+  --method-get: oklch(0.72 0.13 158);
+  --method-post: oklch(0.7 0.12 250);
+  --method-put: oklch(0.78 0.13 78);
+  --method-delete: oklch(0.66 0.17 27);
+  --method-patch: oklch(0.68 0.13 300);
+  --method-misc: oklch(0.62 0.01 255);
+  /* 方法浅底（暗色＝混入 card 承载面，低饱和色块不刺眼） */
+  --method-get-bg: color-mix(in oklab, var(--method-get) 16%, var(--card));
+  --method-post-bg: color-mix(in oklab, var(--method-post) 16%, var(--card));
+  --method-put-bg: color-mix(in oklab, var(--method-put) 16%, var(--card));
+  --method-delete-bg: color-mix(in oklab, var(--method-delete) 16%, var(--card));
+  --method-patch-bg: color-mix(in oklab, var(--method-patch) 16%, var(--card));
+  --method-misc-bg: color-mix(in oklab, var(--method-misc) 16%, var(--card));
+  /* 工作流画布（深色）：平面与窗口基底同档，节点卡（card 0.205）更亮——
+       明暗两套读法一致：画布是纸面，节点卡是浮起的对象 */
+  --canvas: oklch(0.145 0 0);
+  /* 暗底亮点 0.32：对齐 light 档可辨识度的保守提亮，仍低于节点边框
+       （node-line 0.34），网点亮度不超过边框，层次不倒挂 */
+  --canvas-dot: oklch(0.32 0 0);
+  --canvas-edge: oklch(0.55 0 0);
+  --node-line: oklch(0.34 0 0);
+  --node-line-strong: oklch(0.46 0 0);
+  --node-shadow: 0 1px 2px oklch(0 0 0 / 40%), 0 6px 16px -6px oklch(0 0 0 / 30%);
+  --node-shadow-raised: 0 2px 6px oklch(0 0 0 / 45%), 0 16px 36px -8px oklch(0 0 0 / 40%);
+}
+
+/*
+ * 预设强调色：`<html data-accent="…">` 整组覆盖，
+ * 跟随变量五项：--primary / --primary-foreground / --ring / --sidebar-primary / --sidebar-primary-foreground。
+ * 浅色统一白字、深色提亮配近黑字；graphite 即 base-nova 默认令牌。
+ */
+:root[data-accent="indigo"] {
+  --primary: oklch(0.546 0.16 258);
+  --primary-foreground: oklch(0.985 0 0);
+  --ring: oklch(0.546 0.16 258);
+  --sidebar-primary: oklch(0.546 0.16 258);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+}
+
+.dark[data-accent="indigo"] {
+  --primary: oklch(0.7 0.13 258);
+  --primary-foreground: oklch(0.205 0 0);
+  --ring: oklch(0.7 0.13 258);
+  --sidebar-primary: oklch(0.7 0.13 258);
+  --sidebar-primary-foreground: oklch(0.205 0 0);
+}
+
+:root[data-accent="teal"] {
+  --primary: oklch(0.54 0.11 172);
+  --primary-foreground: oklch(0.985 0 0);
+  --ring: oklch(0.54 0.11 172);
+  --sidebar-primary: oklch(0.54 0.11 172);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+}
+
+.dark[data-accent="teal"] {
+  --primary: oklch(0.72 0.1 172);
+  --primary-foreground: oklch(0.205 0 0);
+  --ring: oklch(0.72 0.1 172);
+  --sidebar-primary: oklch(0.72 0.1 172);
+  --sidebar-primary-foreground: oklch(0.205 0 0);
+}
+
+:root[data-accent="violet"] {
+  --primary: oklch(0.54 0.18 300);
+  --primary-foreground: oklch(0.985 0 0);
+  --ring: oklch(0.54 0.18 300);
+  --sidebar-primary: oklch(0.54 0.18 300);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+}
+
+.dark[data-accent="violet"] {
+  --primary: oklch(0.7 0.15 300);
+  --primary-foreground: oklch(0.205 0 0);
+  --ring: oklch(0.7 0.15 300);
+  --sidebar-primary: oklch(0.7 0.15 300);
+  --sidebar-primary-foreground: oklch(0.205 0 0);
+}
+
+:root[data-accent="orange"] {
+  --primary: oklch(0.55 0.14 45);
+  --primary-foreground: oklch(0.985 0 0);
+  --ring: oklch(0.55 0.14 45);
+  --sidebar-primary: oklch(0.55 0.14 45);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+}
+
+.dark[data-accent="orange"] {
+  --primary: oklch(0.75 0.13 55);
+  --primary-foreground: oklch(0.205 0 0);
+  --ring: oklch(0.75 0.13 55);
+  --sidebar-primary: oklch(0.75 0.13 55);
+  --sidebar-primary-foreground: oklch(0.205 0 0);
+}
+
+:root[data-accent="rose"] {
+  --primary: oklch(0.55 0.17 15);
+  --primary-foreground: oklch(0.985 0 0);
+  --ring: oklch(0.55 0.17 15);
+  --sidebar-primary: oklch(0.55 0.17 15);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+}
+
+.dark[data-accent="rose"] {
+  --primary: oklch(0.7 0.14 15);
+  --primary-foreground: oklch(0.205 0 0);
+  --ring: oklch(0.7 0.14 15);
+  --sidebar-primary: oklch(0.7 0.14 15);
+  --sidebar-primary-foreground: oklch(0.205 0 0);
+}
+
+:root[data-accent="graphite"] {
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  /* 焦点环加深至对背景 ≥3:1（WCAG 1.4.11；0.708 灰仅 2.59） */
+  --ring: oklch(0.55 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+}
+
+.dark[data-accent="graphite"] {
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --ring: oklch(0.556 0 0);
+  --sidebar-primary: oklch(0.922 0 0);
+  --sidebar-primary-foreground: oklch(0.205 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /* 全局细滚动条：透明轨道＋圆角滑块（滑块两侧留 2px 透明边收窄视觉宽度），
+     hover 加深一档提示可拖拽；颜色全走语义令牌，明暗主题自动等价 */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background-color: var(--border);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklch, var(--muted-foreground) 50%, transparent);
+  }
+
+  /* 树滚动面（TreePrimitive 根的 data-slot）：细轨 6px（WebKit 覆盖全局
+     8px；Firefox 走 scrollbar-width: thin 同为细档），thumb 仅在指针悬浮
+     树区时显示，不悬浮时全透明——宽度恒占（不切换 scrollbar-width），
+     无布局跳动；显示态沿用全局 thumb 形态（--border 色、圆角、2px 透明边、
+     悬浮加深保持）。
+     显隐挂滚动容器自身的 :hover 而非 group-hover 变体——后者只能选中
+     后代元素，无法命中容器的滚动条伪元素。Firefox 双口径走
+     scrollbar-color（thumb 悬停加深是 WebKit 伪元素独有能力，不跟进） */
+  [data-slot="tree-scroll"] {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  [data-slot="tree-scroll"]:hover {
+    scrollbar-color: var(--border) transparent;
+  }
+  [data-slot="tree-scroll"]::-webkit-scrollbar {
+    width: 6px;
+  }
+  [data-slot="tree-scroll"]::-webkit-scrollbar-thumb {
+    background-color: transparent;
+    transition: background-color 100ms;
+  }
+  [data-slot="tree-scroll"]:hover::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+  }
+  [data-slot="tree-scroll"]:hover::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklch, var(--muted-foreground) 50%, transparent);
+  }
+}
+
+/*
+ * React Flow 画布连线：库把 stroke 写在连线路径与箭头 marker 的
+ * presentation attribute 上（该属性不解析 CSS 变量），主题令牌只能经规则
+ * 覆盖进来——CSS 规则优先于 presentation attribute，箭头不必逐个传色。
+ * 连线语义色收敛在此一处，选中态走强调色，其余令牌见 :root 的画布组。
+ */
+.react-flow__edge-path,
+.react-flow__connection-path {
+  stroke: var(--canvas-edge);
+  stroke-width: 1.5;
+}
+
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:focus-visible .react-flow__edge-path {
+  stroke: var(--primary);
+  stroke-width: 2;
+}
+
+.react-flow__arrowhead polyline {
+  stroke: var(--canvas-edge);
+  fill: var(--canvas-edge);
+}

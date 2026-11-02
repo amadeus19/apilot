@@ -1,0 +1,21 @@
+{
+  "_comment": "搜索口径契约夹具：CLI matches_query 与前端 selector.ts matchesEndpoint 的单一事实源（Rust 侧经 include_str! 引用本文件，前端测试直接 import）。endpoints 顺序即树遍历序（数据序，置顶不提升）；cases.expect 顺序同树序。keyword 由驱动方各自按自身口径 trim（Rust 命令层 trim 后判空报 INVALID_ARGUMENT、前端 filterApiTree 内部 trim，空白语义两端有意分叉、各有专门测试钉住，故本表不含空白关键词 case）。两端测试都必须全量通过本表，任一端改口径另一端立红。",
+  "endpoints": [
+    { "key": "GET /users", "title": "用户列表", "method": "GET", "pathTemplate": "/users", "categoryName": null, "pinned": false },
+    { "key": "POST /pay", "title": "下单", "method": "POST", "pathTemplate": "/pay", "categoryName": "支付分类", "pinned": false },
+    { "key": "uuid-manual", "title": "标题无关", "method": "GET", "pathTemplate": "/misc", "categoryName": "支付分类", "pinned": true },
+    { "key": "DELETE /orders/{id}", "title": "删除订单", "method": "DELETE", "pathTemplate": "/orders/{id}", "categoryName": null, "pinned": false }
+  ],
+  "cases": [
+    { "keyword": "get", "expect": ["GET /users", "uuid-manual"] },
+    { "keyword": "Post", "expect": ["POST /pay"] },
+    { "keyword": "pay", "expect": ["POST /pay"] },
+    { "keyword": "用户", "expect": ["GET /users"] },
+    { "keyword": "支付", "expect": ["POST /pay", "uuid-manual"] },
+    { "keyword": "delete", "expect": ["DELETE /orders/{id}"] },
+    { "keyword": "{id}", "expect": ["DELETE /orders/{id}"] },
+    { "keyword": "  /users  ", "expect": ["GET /users"] },
+    { "keyword": "/Use", "expect": ["GET /users"] },
+    { "keyword": "不存在的关键词", "expect": [] }
+  ]
+}

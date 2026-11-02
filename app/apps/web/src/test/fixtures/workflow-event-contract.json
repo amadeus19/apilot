@@ -1,0 +1,157 @@
+{
+  "description": "工作流执行事件契约（Rust services/workflow_engine/events.rs WorkflowEvent ⇄ 前端 features/workflow/workflow-api.ts WorkflowExecutionEvent，双端钉住）：事件词全集＋各词必有键集（序列化恒存在）与可选键（skip_serializing_if 两态：None / 空数组时键不存在，Some / 非空时键存在）＋终态事件词→状态词对应表＋逐词样例（Rust 侧按样例携带的可选键状态驱动逐变体构造并比对键集；前端把样例喂进 reduceExecutionEvent 验证手写镜像落入正确 UI 态）。事件词或字段演进通道：先改本夹具（双端测试同红）再双端内化；单边改任一端，该端立红。注意 workflow.failed 的 errorCode / errorMessage 是恒存在键（值可为 null，无 skip），与 node.failed 的恒非空字符串必有键形成对照。全部样例共享同一 executionId / workflowId——前端归约按 executionId 路由进 workflow.started 建立的槽位",
+  "events": [
+    "workflow.started",
+    "node.queued",
+    "node.started",
+    "node.completed",
+    "node.failed",
+    "node.cancelled",
+    "node.skipped",
+    "edge.activated",
+    "workflow.completed",
+    "workflow.failed",
+    "workflow.cancelled"
+  ],
+  "requiredKeys": {
+    "workflow.started": ["event", "executionId", "workflowId"],
+    "node.queued": ["event", "executionId", "nodeId"],
+    "node.started": ["event", "executionId", "nodeId"],
+    "node.completed": ["event", "executionId", "nodeId", "durationMs"],
+    "node.failed": ["event", "executionId", "nodeId", "errorCode", "errorMessage"],
+    "node.cancelled": ["event", "executionId", "nodeId"],
+    "node.skipped": ["event", "executionId", "nodeId"],
+    "edge.activated": ["event", "executionId", "edgeId"],
+    "workflow.completed": ["event", "executionId", "workflowId", "durationMs"],
+    "workflow.failed": ["event", "executionId", "workflowId", "durationMs", "errorCode", "errorMessage"],
+    "workflow.cancelled": ["event", "executionId", "workflowId", "durationMs"]
+  },
+  "optionalKeys": {
+    "workflow.started": [],
+    "node.queued": [],
+    "node.started": [],
+    "node.completed": ["output", "assertions"],
+    "node.failed": ["assertions"],
+    "node.cancelled": [],
+    "node.skipped": [],
+    "edge.activated": [],
+    "workflow.completed": [],
+    "workflow.failed": [],
+    "workflow.cancelled": []
+  },
+  "statusMap": {
+    "workflow.completed": "passed",
+    "workflow.failed": "failed",
+    "workflow.cancelled": "cancelled",
+    "node.completed": "passed",
+    "node.failed": "failed",
+    "node.cancelled": "cancelled",
+    "node.skipped": "skipped"
+  },
+  "samples": [
+    {
+      "name": "workflow.started 建槽（其余样例按 executionId 路由进本槽）",
+      "event": "workflow.started",
+      "executionId": "e1",
+      "workflowId": "wf1"
+    },
+    {
+      "name": "node.queued 节点排队",
+      "event": "node.queued",
+      "executionId": "e1",
+      "nodeId": "login"
+    },
+    {
+      "name": "node.started 节点开始（前态须为 queued）",
+      "event": "node.started",
+      "executionId": "e1",
+      "nodeId": "login"
+    },
+    {
+      "name": "node.completed 缺省态：请求节点无产物无断言（output / assertions 键不存在）",
+      "event": "node.completed",
+      "executionId": "e1",
+      "nodeId": "login",
+      "durationMs": 120
+    },
+    {
+      "name": "node.completed 携带态：断言节点产物摘要＋逐规则结果（output / assertions 键存在）",
+      "event": "node.completed",
+      "executionId": "e1",
+      "nodeId": "assert",
+      "durationMs": 15,
+      "output": "assertions 1/2 passed",
+      "assertions": [
+        { "ruleKind": "statusCode", "path": null, "expected": "200", "actual": "200", "passed": true },
+        {
+          "ruleKind": "jsonPath",
+          "path": "$.success",
+          "expected": "true",
+          "actual": "false",
+          "passed": false
+        }
+      ]
+    },
+    {
+      "name": "node.failed 缺省态：请求节点传输失败（assertions 键不存在）",
+      "event": "node.failed",
+      "executionId": "e1",
+      "nodeId": "login",
+      "errorCode": "HTTP_REQUEST_FAILED",
+      "errorMessage": "connection refused"
+    },
+    {
+      "name": "node.failed 携带态：断言节点判定失败带逐规则结果（assertions 键存在）",
+      "event": "node.failed",
+      "executionId": "e1",
+      "nodeId": "assert",
+      "errorCode": "WORKFLOW_ASSERT_FAILED",
+      "errorMessage": "1 of 2 assertions failed",
+      "assertions": [
+        { "ruleKind": "statusCode", "path": null, "expected": "200", "actual": "500", "passed": false },
+        { "ruleKind": "exists", "path": "$.token", "expected": null, "actual": "***", "passed": true }
+      ]
+    },
+    {
+      "name": "node.cancelled 在途节点被取消",
+      "event": "node.cancelled",
+      "executionId": "e1",
+      "nodeId": "login"
+    },
+    {
+      "name": "node.skipped 失败传播时未执行的下游节点",
+      "event": "node.skipped",
+      "executionId": "e1",
+      "nodeId": "notify"
+    },
+    {
+      "name": "edge.activated 边激活（画布流动动画）",
+      "event": "edge.activated",
+      "executionId": "e1",
+      "edgeId": "e0"
+    },
+    {
+      "name": "workflow.completed 工作流通过",
+      "event": "workflow.completed",
+      "executionId": "e1",
+      "workflowId": "wf1",
+      "durationMs": 300
+    },
+    {
+      "name": "workflow.failed 工作流失败（errorCode / errorMessage 恒存在、本例取 null）",
+      "event": "workflow.failed",
+      "executionId": "e1",
+      "workflowId": "wf1",
+      "durationMs": 50,
+      "errorCode": null,
+      "errorMessage": null
+    },
+    {
+      "name": "workflow.cancelled 工作流取消",
+      "event": "workflow.cancelled",
+      "executionId": "e1",
+      "workflowId": "wf1",
+      "durationMs": 10
+    }
+  ]
+}

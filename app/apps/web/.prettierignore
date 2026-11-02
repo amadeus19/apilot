@@ -1,0 +1,11 @@
+# 原型草稿目录（gitignore，不入库、不进构建链；自带独立 tsconfig）
+# 不参与格式门禁——草稿会被反复涂改，过 check 无维护价值（2026-10-06 定案）
+prototypes/
+
+# 测试覆盖率生成物与 Tauri 自动生成 schema——产物目录不进格式门禁
+coverage/
+src-tauri/gen/
+
+# 双端契约夹具：格式随生成器输出对齐，prettier 重排会破坏与 Rust 侧的一致性
+src/test/fixtures/
+src-tauri/tests/fixtures/

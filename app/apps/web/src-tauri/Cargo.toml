@@ -1,0 +1,95 @@
+[package]
+name = "app"
+version = "0.1.5"
+description = "APilot 2.0 - Windows 优先的桌面 API 调试 / 接口测试 / 环境管理 / 接口工作流工具"
+authors = ["APilot"]
+license = ""
+repository = ""
+edition = "2024"
+rust-version = "1.90"
+# 双 bin：`cargo run`/默认构建指 GUI 主程序
+default-run = "app"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+# CLI 入口：逻辑全部在 lib `cli` 模块，本壳一行转发；
+# tauri 工具链对双 bin 零配置自动支持（dev/build --bins，NSIS/MSI 随 GUI 收录）
+[[bin]]
+name = "apilot"
+path = "src/bin/apilot.rs"
+
+[build-dependencies]
+tauri-build = { version = "2.7.0", features = [] }
+
+[dependencies]
+# "devtools" feature 仅用于 release 构建下 WebviewWindowBuilder::devtools()
+# 可用（F12 加速键只认创建时的值，创建值由 setup 按 devMode 初值给出，
+# 见 services/devtools.rs）——debug 构建该 API 本就可用
+tauri = { version = "2.12.0", features = ["devtools"] }
+tauri-plugin-os = "2"
+tauri-plugin-opener = "2"
+# 12 号票：设置面板「更改目录」的系统文件夹选择器
+tauri-plugin-dialog = "2"
+# 备份恢复暂存后的「立即重启」（官方 process 插件，仅 relaunch 能力被使用）
+tauri-plugin-process = "2.4.0"
+# CLI 命令行解析：derive 模式，v4
+clap = { version = "4", features = ["derive"] }
+# HTTP 客户端（Phase 4 引擎）：stream＝响应流式分级读取、socks＝代理 socks5、
+# multipart＝上传形态；默认 TLS 后端在 Windows 走 schannel（native-tls），零额外构建链
+reqwest = { version = "0.12", features = ["stream", "socks", "multipart", "json"] }
+# reqwest 响应 bytes_stream 的消费组合子（StreamExt）
+futures-util = "0.3"
+# Output Layer Human 表格的无边框空格对齐（spec §4.2）：东亚宽字符列宽计算
+unicode-width = "0.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+# 手工接口 / 分类 / 工作空间身份 UUID v4（uuid 已是既有传递依赖，显式声明使用）
+uuid = { version = "1", features = ["v4"] }
+thiserror = "2"
+# "signal"＝CLI api run 的 Ctrl+C 侧车（tokio::signal::ctrl_c）；
+# "net"+"io-util"＝同步域拉取测试的本地 TCP 应答器（lib 内单测不依赖公网）；
+# "process"＝设置页 CLI 状态探测拉起 apilot.exe --version（kill_on_drop 让
+# 超时 drop future 即杀子进程，超时成为唯一取消通路）
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "signal", "net", "io-util", "process"] }
+# "io"＝multipart 文件 part 的流式承载（ReaderStream 把 tokio::fs::File 转
+# Stream 交 reqwest Body::wrap_stream，按需分块读取、不整包驻内存）
+tokio-util = { version = "0.7", features = ["io"] }
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+# 17 号票：更新包 sha256 与 minisign 签名校验（官方 updater 同款算法，禁手写密码学）
+sha2 = "0.10"
+minisign-verify = "0.2"
+# manifest 的 signature 字段按 tauri 约定是 .sig 全文再 base64 一层，验签前先解包
+base64 = "0.22"
+# 版本比较用严格 SemVer（cargo 同款实现）：pre-release 排序规则手写易错
+# （0.2.0-rc.1 < 0.2.0、数字段 < 字母段），发版判定不容此类偏差
+semver = "1"
+# 同步域唯一解析依赖（选型定案见调研票）：3.0.x 走 v3 模型、Swagger 2.0
+# 走 `v2` feature 模型，自研归一层映射统一内部模型（upgrade() 丢 example
+# 不采用）；与上游 openapiv3 同 lib 名，二者不得同时直接依赖
+openapiv3-extended = { version = "6.0", features = ["v2"] }
+# 16 号票：DevTools 是 WebView2 弹出的独立 OS 窗口（wry close_devtools 空操作），
+# devMode 关闭时按标题定位本进程窗口发 WM_CLOSE 需要 Win32 FFI
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_System_Threading",
+  "Win32_System_Diagnostics_ToolHelp",
+  # 数据目录发现（infrastructure/data_dir）：SHGetKnownFolderPath +
+  # FOLDERID_RoamingAppData，与 Tauri app_data_dir 底层同源
+  "Win32_UI_Shell",
+  "Win32_System_Com",
+  # 用户 PATH 注册读写（infrastructure/path_env）：HKCU\Environment
+  "Win32_System_Registry",
+] }
+zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+# 演示靶机（ADR-0008）：仅测试引用，同进程内嵌自旋（端口 0），不进产品运行时依赖树
+demo-server = { path = "../../../demo-server" }

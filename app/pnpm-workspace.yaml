@@ -1,0 +1,9 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "playwright-test"
+
+# pnpm ≥10 默认阻止依赖的 build script；esbuild（Vite 构建链）需要获批
+# （allowBuilds 字段需 pnpm ≥10.26，本机 10.13 用兼容字段 onlyBuiltDependencies）
+onlyBuiltDependencies:
+  - esbuild

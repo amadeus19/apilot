@@ -1,0 +1,31 @@
+{
+  "name": "apilot2",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "lint": "turbo lint",
+    "format": "turbo format",
+    "format:check": "turbo format:check",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "check:rust": "cargo check --workspace",
+    "test:rust": "cargo test --workspace",
+    "tauri": "pnpm --filter web exec tauri",
+    "demo:server": "cargo run -p demo-server",
+    "gate": "turbo build typecheck lint test && pnpm format:check && pnpm check:rust && pnpm test:rust",
+    "prepare": "node scripts/install-hooks.mjs",
+    "coverage": "turbo coverage"
+  },
+  "devDependencies": {
+    "prettier": "^3.9.6",
+    "prettier-plugin-tailwindcss": "^0.8.1",
+    "turbo": "^2.9.18",
+    "typescript": "~6"
+  },
+  "packageManager": "pnpm@10.13.1",
+  "engines": {
+    "node": ">=20"
+  }
+}

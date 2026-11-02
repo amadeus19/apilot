@@ -1,0 +1,278 @@
+import { z } from 'zod'
+
+/**
+ * settings 各键 value 的 Zod 校验：boot 载荷与 set_setting 前端侧共用。
+ * 脏数据（解析失败）由调用方回退默认值并上报（safeParse + fallback），不炸启动。
+ * 注意：Rust 侧白名单只管键名；value 结构校验唯一在此。
+ */
+
+export const THEME_PREFERENCES = ['light', 'dark', 'system'] as const
+export const ACCENTS = ['indigo', 'teal', 'violet', 'orange', 'rose', 'graphite'] as const
+export const LOCALES = ['system', 'zh-CN', 'en'] as const
+export const LOG_LEVELS = ['error', 'warn', 'info', 'debug'] as const
+export const UPDATE_SOURCE_TYPES = ['cloud', 'local', 'network'] as const
+/** 超时分段档位（不限制＝null 不入枚举，四档含默认由 UI 控件保证） */
+export const HTTP_TIMEOUT_STEPS = [10, 30, 60] as const
+export const HTTP_PROXY_MODES = ['none', 'custom'] as const
+
+export type ThemePreference = (typeof THEME_PREFERENCES)[number]
+export type AccentName = (typeof ACCENTS)[number]
+export type LocalePreference = (typeof LOCALES)[number]
+export type LogLevel = (typeof LOG_LEVELS)[number]
+export type UpdateSourceType = (typeof UPDATE_SOURCE_TYPES)[number]
+export type HttpTimeoutStep = (typeof HTTP_TIMEOUT_STEPS)[number]
+export type HttpProxyMode = (typeof HTTP_PROXY_MODES)[number]
+export type ResolvedTheme = Exclude<ThemePreference, 'system'>
+export type ResolvedLocale = Exclude<LocalePreference, 'system'>
+
+/** settings 键 `theme`：{"preference":"system","accent":"indigo"} */
+export type ThemeSetting = { preference: ThemePreference; accent: AccentName }
+export type LocaleSetting = { preference: LocalePreference }
+export type DevModeSetting = { enabled: boolean }
+export type LogLevelSetting = { level: LogLevel }
+/** settings 键 `logDir`：null = 默认目录（LocalAppData），重启生效 */
+export type LogDirSetting = { path: string | null }
+/** settings 键 `updateSource`：软件版本更新渠道。
+ * 云类型 path 可空（后续版本对接）；local/network path = 目录（保存前 Rust 校验）。
+ * 「更新源」与同步（Sync）域的「更新」无关。
+ */
+export type UpdateSourceSetting = { type: UpdateSourceType; path: string | null }
+/** settings 键 `autoCheckUpdates`：boot 后自动检查更新开关（关 = 仅手动检查） */
+export type AutoCheckUpdatesSetting = { enabled: boolean }
+/** settings 键 `shell.leftPanelWidth`：左栏宽度持久化（px；null = 未定制） */
+export type ShellLeftPanelWidthSetting = { width: number | null }
+/** settings 键 `keybindings`：命令键位覆盖表（仅存覆盖项；null = 显式清空） */
+export type KeybindingsOverrides = Record<string, string | null>
+/** settings 键 `workflowPins`：每工作空间至多一个的状态栏固定工作流
+ * （workspaceId → workflowId；UI 偏好非业务数据，工作流被删后由消费方自愈隐藏） */
+export type WorkflowPinsSetting = Record<string, string>
+/** settings 键 `http` 的代理段：mode＝none（默认）| custom（url 必填，Rust 侧写前校验） */
+export type HttpProxySetting = { mode: HttpProxyMode; url: string | null }
+/** settings 键 `http`：全局 HTTP 行为（机器与网络语境，不随工作空间切换）。
+ * timeoutSeconds：null＝不限制（默认）| 正整数秒（档位 10/30/60 由 UI 控件保证）；
+ * redirect：跟随 3xx（上限固定 10）；tlsVerify：默认校验；
+ * proxy：不使用（默认）/ 自定义（scheme 自动判别 http / https / socks5）。
+ */
+export type HttpSetting = {
+  timeoutSeconds: number | null
+  redirect: boolean
+  tlsVerify: boolean
+  proxy: HttpProxySetting
+}
+
+// schema 校验「存在但损坏」：字段 optional（缺失=默认），非法枚举/类型才会失败
+const themeSettingSchema: z.ZodType<Partial<ThemeSetting>> = z.object({
+  preference: z.enum(THEME_PREFERENCES).optional(),
+  accent: z.enum(ACCENTS).optional(),
+})
+
+const localeSettingSchema: z.ZodType<Partial<LocaleSetting>> = z.object({
+  preference: z.enum(LOCALES).optional(),
+})
+
+const devModeSettingSchema: z.ZodType<Partial<DevModeSetting>> = z.object({
+  enabled: z.boolean().optional(),
+})
+
+const logLevelSettingSchema: z.ZodType<Partial<LogLevelSetting>> = z.object({
+  level: z.enum(LOG_LEVELS).optional(),
+})
+
+const logDirSettingSchema: z.ZodType<Partial<LogDirSetting>> = z.object({
+  path: z.string().nullable().optional(),
+})
+
+const updateSourceSettingSchema: z.ZodType<Partial<UpdateSourceSetting>> = z.object({
+  type: z.enum(UPDATE_SOURCE_TYPES).optional(),
+  path: z.string().nullable().optional(),
+})
+
+const autoCheckUpdatesSettingSchema: z.ZodType<Partial<AutoCheckUpdatesSetting>> = z.object({
+  enabled: z.boolean().optional(),
+})
+
+const shellLeftPanelWidthSettingSchema: z.ZodType<Partial<ShellLeftPanelWidthSetting>> = z.object({
+  width: z.number().int().min(0).max(8192).nullable().optional(),
+})
+
+const keybindingsSchema: z.ZodType<Partial<KeybindingsOverrides>> = z.record(
+  z.string(),
+  z.string().nullable(),
+)
+
+// 键与值都要求非空字符串：空串 id 无业务语义，出现即整键判脏回退默认
+const workflowPinsSchema: z.ZodType<Partial<WorkflowPinsSetting>> = z.record(
+  z.string().min(1),
+  z.string().min(1),
+)
+
+/** 代理段解析：字段齐全才合法（custom 缺 url 与 Rust 写前校验同口径——
+ * 缺 url 的半成品整体判脏，回退默认并登记，避免半对象经浅合并破坏类型完备） */
+const httpProxySettingSchema: z.ZodType<HttpProxySetting> = z.object({
+  mode: z.enum(HTTP_PROXY_MODES),
+  url: z.string().nullable(),
+})
+
+const httpSettingSchema: z.ZodType<Partial<HttpSetting>> = z.object({
+  // 超时宽松解析（null | 正整数）；档位约束由 UI 分段控件保证，与 Rust 侧
+  // 上限护栏（1..=86400）各自为政：库内超档值不至于炸启动
+  timeoutSeconds: z.number().int().positive().nullable().optional(),
+  redirect: z.boolean().optional(),
+  tlsVerify: z.boolean().optional(),
+  proxy: httpProxySettingSchema.optional(),
+})
+
+export const SETTINGS_DEFAULTS = {
+  theme: { preference: 'system', accent: 'indigo' },
+  locale: { preference: 'system' },
+  devMode: { enabled: false },
+  logLevel: { level: 'info' },
+  logDir: { path: null },
+  updateSource: { type: 'local', path: null },
+  autoCheckUpdates: { enabled: true },
+  shell: { width: null },
+  keybindings: {},
+  workflowPins: {},
+  http: {
+    timeoutSeconds: null,
+    redirect: true,
+    tlsVerify: true,
+    proxy: { mode: 'none', url: null },
+  },
+} as const satisfies Record<string, object>
+
+export type ParsedSettings = {
+  theme: ThemeSetting
+  locale: LocaleSetting
+  devMode: DevModeSetting
+  logLevel: LogLevelSetting
+  logDir: LogDirSetting
+  updateSource: UpdateSourceSetting
+  autoCheckUpdates: AutoCheckUpdatesSetting
+  shell: ShellLeftPanelWidthSetting
+  keybindings: KeybindingsOverrides
+  workflowPins: WorkflowPinsSetting
+  http: HttpSetting
+  /** 解析失败的键（脏数据已回退默认，交由调用方上报） */
+  invalidKeys: string[]
+}
+
+/** 单键解析：缺失=默认；损坏=默认并登记键名；部分合法字段与默认合并 */
+function parseOne<T extends object>(
+  schema: z.ZodType<Partial<T>>,
+  value: unknown,
+  key: string,
+  defaults: T,
+  invalidKeys: string[],
+): T {
+  if (value === undefined) return { ...defaults }
+  const result = schema.safeParse(value)
+  if (!result.success) {
+    invalidKeys.push(key)
+    return { ...defaults }
+  }
+  return { ...defaults, ...result.data }
+}
+
+/**
+ * 解析 boot 载荷中的 settings 全量：逐键 safeParse，失败键回退默认并登记。
+ * 「整体脏」与「单键脏」都只影响对应键（部分损坏不放大为整体回退）。
+ */
+export function parseSettings(raw: Record<string, unknown> | null | undefined): ParsedSettings {
+  const invalidKeys: string[] = []
+  if (!raw) return { ...structuredClone(SETTINGS_DEFAULTS), invalidKeys: [] }
+
+  // 缺失键 = 新库首启动形态，直接用默认且不算脏；仅「存在但损坏」才回退并登记
+  return {
+    theme: parseOne(themeSettingSchema, raw.theme, 'theme', SETTINGS_DEFAULTS.theme, invalidKeys),
+    locale: parseOne(
+      localeSettingSchema,
+      raw.locale,
+      'locale',
+      SETTINGS_DEFAULTS.locale,
+      invalidKeys,
+    ),
+    devMode: parseOne(
+      devModeSettingSchema,
+      raw.devMode,
+      'devMode',
+      SETTINGS_DEFAULTS.devMode,
+      invalidKeys,
+    ),
+    logLevel: parseOne(
+      logLevelSettingSchema,
+      raw.logLevel,
+      'logLevel',
+      SETTINGS_DEFAULTS.logLevel,
+      invalidKeys,
+    ),
+    logDir: parseOne(
+      logDirSettingSchema,
+      raw.logDir,
+      'logDir',
+      SETTINGS_DEFAULTS.logDir,
+      invalidKeys,
+    ),
+    updateSource: parseOne(
+      updateSourceSettingSchema,
+      raw.updateSource,
+      'updateSource',
+      SETTINGS_DEFAULTS.updateSource,
+      invalidKeys,
+    ),
+    http: parseOne(httpSettingSchema, raw.http, 'http', SETTINGS_DEFAULTS.http, invalidKeys),
+    autoCheckUpdates: parseOne(
+      autoCheckUpdatesSettingSchema,
+      raw.autoCheckUpdates,
+      'autoCheckUpdates',
+      SETTINGS_DEFAULTS.autoCheckUpdates,
+      invalidKeys,
+    ),
+    shell: parseOne(
+      shellLeftPanelWidthSettingSchema,
+      raw['shell.leftPanelWidth'],
+      'shell.leftPanelWidth',
+      SETTINGS_DEFAULTS.shell,
+      invalidKeys,
+    ),
+    keybindings: parseOne(
+      keybindingsSchema,
+      raw.keybindings,
+      'keybindings',
+      SETTINGS_DEFAULTS.keybindings,
+      invalidKeys,
+    ),
+    workflowPins: parseOne(
+      workflowPinsSchema,
+      raw.workflowPins,
+      'workflowPins',
+      SETTINGS_DEFAULTS.workflowPins,
+      invalidKeys,
+    ),
+    invalidKeys,
+  }
+}
+
+/**
+ * 语言解析链（启动与切换共用）：
+ * preference ≠ system 直用；system 态按 os locale 前缀归档，其余回退 zh-CN。
+ */
+export function resolveLocale(
+  preference: LocalePreference,
+  systemLocale: string | null | undefined,
+): ResolvedLocale {
+  if (preference !== 'system') return preference
+  const normalized = systemLocale?.toLowerCase() ?? ''
+  if (normalized.startsWith('zh')) return 'zh-CN'
+  if (normalized.startsWith('en')) return 'en'
+  return 'zh-CN'
+}
+
+/** 主题解析：system 态真值只走 Tauri（onThemeChanged / theme()），禁用 prefers-color-scheme */
+export function resolveTheme(
+  preference: ThemePreference,
+  systemTheme: ResolvedTheme | null | undefined,
+): ResolvedTheme {
+  if (preference !== 'system') return preference
+  return systemTheme ?? 'light'
+}

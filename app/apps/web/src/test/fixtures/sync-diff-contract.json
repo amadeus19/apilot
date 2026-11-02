@@ -1,0 +1,221 @@
+{
+  "summary": {
+    "added": 1,
+    "changed": 1,
+    "removed": 1,
+    "unchanged": 0
+  },
+  "diffs": [
+    {
+      "key": "POST /users",
+      "kind": "changed",
+      "title": "列表",
+      "category": "",
+      "params": [
+        {
+          "name": "page",
+          "change": "changed",
+          "old": {
+            "location": "query",
+            "required": false,
+            "paramType": "integer",
+            "description": "页码"
+          },
+          "new": {
+            "location": "query",
+            "required": false,
+            "paramType": "integer",
+            "description": "页码（从 1 起）"
+          }
+        },
+        {
+          "name": "size",
+          "change": "unchanged",
+          "old": {
+            "location": "query",
+            "required": false,
+            "paramType": "integer",
+            "description": "每页数量"
+          },
+          "new": {
+            "location": "query",
+            "required": false,
+            "paramType": "integer",
+            "description": "每页数量"
+          }
+        },
+        {
+          "name": "lang",
+          "change": "removed",
+          "old": {
+            "location": "query",
+            "required": false,
+            "paramType": "integer",
+            "description": "语言"
+          }
+        },
+        {
+          "name": "trace",
+          "change": "changed",
+          "old": {
+            "location": "query",
+            "required": false,
+            "paramType": "integer",
+            "description": "链路追踪头"
+          },
+          "new": {
+            "location": "header",
+            "required": false,
+            "paramType": "integer",
+            "description": "链路追踪头"
+          }
+        },
+        {
+          "name": "verbose",
+          "change": "added",
+          "new": {
+            "location": "query",
+            "required": false,
+            "paramType": "integer",
+            "description": "详细输出"
+          }
+        }
+      ],
+      "bodyKeys": [
+        {
+          "keyPath": "name",
+          "change": "unchanged",
+          "old": {
+            "schemaType": "string",
+            "required": true
+          },
+          "new": {
+            "schemaType": "string",
+            "required": true
+          }
+        },
+        {
+          "keyPath": "age",
+          "change": "removed",
+          "old": {
+            "schemaType": "integer",
+            "required": false
+          }
+        },
+        {
+          "keyPath": "addr",
+          "change": "unchanged",
+          "old": {
+            "schemaType": "object",
+            "required": false
+          },
+          "new": {
+            "schemaType": "object",
+            "required": false
+          }
+        },
+        {
+          "keyPath": "addr.city",
+          "change": "changed",
+          "old": {
+            "schemaType": "string",
+            "required": true
+          },
+          "new": {
+            "schemaType": "string",
+            "required": false
+          }
+        },
+        {
+          "keyPath": "tags",
+          "change": "unchanged",
+          "old": {
+            "schemaType": "array",
+            "required": false
+          },
+          "new": {
+            "schemaType": "array",
+            "required": false
+          }
+        },
+        {
+          "keyPath": "tags[]",
+          "change": "changed",
+          "old": {
+            "schemaType": "string",
+            "required": false
+          },
+          "new": {
+            "schemaType": "integer",
+            "required": false
+          }
+        },
+        {
+          "keyPath": "email",
+          "change": "added",
+          "new": {
+            "schemaType": "string",
+            "required": true
+          }
+        }
+      ],
+      "responses": [
+        {
+          "status": "200",
+          "change": "unchanged",
+          "oldDescription": "成功",
+          "newDescription": "成功",
+          "keys": [
+            {
+              "keyPath": "total",
+              "change": "unchanged",
+              "old": {
+                "schemaType": "integer",
+                "required": false
+              },
+              "new": {
+                "schemaType": "integer",
+                "required": false
+              }
+            }
+          ]
+        },
+        {
+          "status": "404",
+          "change": "added",
+          "newDescription": "未找到",
+          "keys": []
+        }
+      ]
+    },
+    {
+      "key": "GET /users/{id}",
+      "kind": "added",
+      "title": "列表",
+      "category": "",
+      "params": [
+        {
+          "name": "id",
+          "change": "added",
+          "new": {
+            "location": "query",
+            "required": false,
+            "paramType": "integer",
+            "description": "用户 ID"
+          }
+        }
+      ],
+      "bodyKeys": [],
+      "responses": []
+    },
+    {
+      "key": "DELETE /users/{id}",
+      "kind": "removed",
+      "title": "列表",
+      "category": "",
+      "params": [],
+      "bodyKeys": [],
+      "responses": []
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- APilot 2.0 应用图标源文件（定稿：正视纸飞机，纯色底）
+       形态：白色实心纸飞机剪影——机鼻朝上，双翼下伸，深 V 尾
+       底色：纯色 #2a6bcb，无渐变
+       尺寸体系：四周 40px 透明边距，tile 944px，Windows 11 圆角幅度 -->
+  <clipPath id="tile">
+    <rect x="40" y="40" width="944" height="944" rx="152"/>
+  </clipPath>
+
+  <g clip-path="url(#tile)">
+    <rect x="40" y="40" width="944" height="944" fill="#2A6BCB"/>
+  </g>
+
+  <path fill="#FFFFFF" d="M 512 242 L 730 782 L 512 639 L 294 782 Z"/>
+</svg>

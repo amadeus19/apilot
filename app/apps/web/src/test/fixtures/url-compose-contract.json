@@ -1,0 +1,140 @@
+{
+  "_comment": "最终 URL 组合口径契约夹具：Rust services/http/request.rs 的 build_url 与前端 features/workbench/url-draft.ts 的 composeFinalUrl 共享的单一事实源（Rust 侧经 include_str! 引用本文件，前端测试直接 import）。任一端改口径另一端立红，两端测试都必须全量通过本表。覆盖面：BaseUrl 尾斜杠收敛、query 行序拼接、占位符填充/未命中透传/空值落 query、绝对 URL 模板完全绕过 BaseUrl（已配置合法 / 非法 / 未配置三形态）、相对模板缺 BaseUrl 与非 http(s) scheme 的错误形态、query 值与占位值的百分号编码（空格 %20、非 ASCII UTF-8、结构字符）、同名多值全保留、{{变量}} 不消费、重复占位全替换。",
+  "cases": [
+    {
+      "name": "base-url-trailing-slash-trimmed",
+      "baseUrl": "http://127.0.0.1:18080/",
+      "pathTemplate": "/api/users",
+      "params": [],
+      "expectUrl": "http://127.0.0.1:18080/api/users"
+    },
+    {
+      "name": "base-url-multiple-trailing-slashes",
+      "baseUrl": "http://x.test///",
+      "pathTemplate": "/a",
+      "params": [],
+      "expectUrl": "http://x.test/a"
+    },
+    {
+      "name": "query-appended-in-row-order",
+      "baseUrl": "http://x.test",
+      "pathTemplate": "/api/users",
+      "params": [
+        { "name": "verbose", "value": "true" },
+        { "name": "page", "value": "2" }
+      ],
+      "expectUrl": "http://x.test/api/users?verbose=true&page=2"
+    },
+    {
+      "name": "placeholder-filled-and-consumed-empty-name-skipped",
+      "baseUrl": "http://127.0.0.1:18080",
+      "pathTemplate": "/api/users/{id}/posts",
+      "params": [
+        { "name": "id", "value": "42" },
+        { "name": "verbose", "value": "true" },
+        { "name": "", "value": "skip-me" }
+      ],
+      "expectUrl": "http://127.0.0.1:18080/api/users/42/posts?verbose=true"
+    },
+    {
+      "name": "placeholder-unfilled-stays-literal",
+      "baseUrl": "http://x.test",
+      "pathTemplate": "/api/users/{id}",
+      "params": [{ "name": "other", "value": "1" }],
+      "expectUrl": "http://x.test/api/users/{id}?other=1"
+    },
+    {
+      "name": "empty-value-placeholder-row-falls-through-to-query",
+      "baseUrl": "http://x.test",
+      "pathTemplate": "/users/{id}",
+      "params": [{ "name": "id", "value": "" }],
+      "expectUrl": "http://x.test/users/{id}?id="
+    },
+    {
+      "name": "absolute-template-bypasses-configured-base-url",
+      "baseUrl": "https://other.test/prefix",
+      "pathTemplate": "https://api.example.com/v1/users",
+      "params": [],
+      "expectUrl": "https://api.example.com/v1/users"
+    },
+    {
+      "name": "absolute-template-without-base-url",
+      "baseUrl": null,
+      "pathTemplate": "https://api.example.com/v1/users/{id}",
+      "params": [
+        { "name": "id", "value": "7" },
+        { "name": "verbose", "value": "true" }
+      ],
+      "expectUrl": "https://api.example.com/v1/users/7?verbose=true"
+    },
+    {
+      "name": "absolute-template-ignores-invalid-base-url",
+      "baseUrl": "ftp://broken",
+      "pathTemplate": "https://api.example.com/v1/users",
+      "params": [],
+      "expectUrl": "https://api.example.com/v1/users"
+    },
+    {
+      "name": "relative-template-requires-base-url",
+      "baseUrl": null,
+      "pathTemplate": "/a",
+      "params": [],
+      "expectError": "no-base-url"
+    },
+    {
+      "name": "base-url-must-be-http-scheme",
+      "baseUrl": "ftp://x",
+      "pathTemplate": "/a",
+      "params": [],
+      "expectError": "invalid-base-url"
+    },
+    {
+      "name": "query-value-structural-characters-encoded",
+      "baseUrl": "http://x.test",
+      "pathTemplate": "/a",
+      "params": [{ "name": "q", "value": "a b&c=1" }],
+      "expectUrl": "http://x.test/a?q=a%20b%26c%3D1"
+    },
+    {
+      "name": "non-ascii-utf8-percent-encoded",
+      "baseUrl": "http://x.test",
+      "pathTemplate": "/search",
+      "params": [{ "name": "关键词", "value": "中文 值" }],
+      "expectUrl": "http://x.test/search?%E5%85%B3%E9%94%AE%E8%AF%8D=%E4%B8%AD%E6%96%87%20%E5%80%BC"
+    },
+    {
+      "name": "duplicate-query-keys-all-kept",
+      "baseUrl": "http://x.test",
+      "pathTemplate": "/a",
+      "params": [
+        { "name": "tag", "value": "a" },
+        { "name": "tag", "value": "b" }
+      ],
+      "expectUrl": "http://x.test/a?tag=a&tag=b"
+    },
+    {
+      "name": "variable-reference-braces-not-consumed",
+      "baseUrl": "http://x.test",
+      "pathTemplate": "/a/{{var}}/b/{id}",
+      "params": [
+        { "name": "id", "value": "3" },
+        { "name": "var", "value": "9" }
+      ],
+      "expectUrl": "http://x.test/a/{{var}}/b/3?var=9"
+    },
+    {
+      "name": "repeated-placeholder-all-replaced",
+      "baseUrl": "http://x.test",
+      "pathTemplate": "/mirror/{id}/{id}",
+      "params": [{ "name": "id", "value": "5" }],
+      "expectUrl": "http://x.test/mirror/5/5"
+    },
+    {
+      "name": "placeholder-value-percent-encoded-in-path",
+      "baseUrl": "http://x.test",
+      "pathTemplate": "/files/{name}",
+      "params": [{ "name": "name", "value": "a b/c?d" }],
+      "expectUrl": "http://x.test/files/a%20b%2Fc%3Fd"
+    }
+  ]
+}

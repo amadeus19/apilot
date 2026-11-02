@@ -1,0 +1,3 @@
+# tauri build 生成的 schema（target 目录已随 app 级 workspace 上移至 app/target，
+# 由仓库根 .gitignore 的 target 规则覆盖）
+/gen/schemas

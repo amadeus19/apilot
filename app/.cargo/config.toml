@@ -1,0 +1,8 @@
+# 项目级 cargo 源配置：本机全局配置的清华 git 索引镜像已停服（git 协议 403），
+# 本仓库改用字节 rsproxy sparse 索引——项目级配置优先于全局，仓库外不受影响。
+# （官方 index.crates.io 与 crates.io 同源，不能作为 replace-with 替换源）
+[source.crates-io]
+replace-with = "rsproxy-sparse"
+
+[source.rsproxy-sparse]
+registry = "sparse+https://rsproxy.cn/index/"

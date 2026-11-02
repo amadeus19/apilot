@@ -1,0 +1,28 @@
+# 演示靶机（ADR-0008）：带 Swagger UI 的本地演示服务，兼作集成测试靶机。
+# 仅经 src-tauri [dev-dependencies] path 依赖引用，不进产品运行时依赖树。
+[package]
+name = "demo-server"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+# 版本组配对锁死（01 号调研）：axum ^0.8.4 ＋ utoipa 6.0.0 ＋ utoipa-swagger-ui 10.0.1
+# ＋ utoipa-axum 0.3.0 成组取用，勿与 utoipa 5.x / swagger-ui 9.x 混用
+axum = { version = "0.8.4", features = ["multipart"] }
+# axum_extras：#[utoipa::path] 识别 axum 提取器（Query / Path / Json）
+utoipa = { version = "6.0.0", features = ["axum_extras"] }
+utoipa-axum = "0.3.0"
+# vendored：Swagger UI 静态资源离线内置，构建零联网
+utoipa-swagger-ui = { version = "10.0.1", features = ["axum", "vendored"] }
+# Windows 下 aws-lc-rs 系 C/汇编工具链，取纯 Rust 后端；HS256 对称密钥不依赖 use_pem
+jsonwebtoken = { version = "11.1.0", default-features = false, features = ["rust_crypto"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+async-stream = "0.3"
+
+[dev-dependencies]
+# oneshot 直调 Router 的处理器级自测（不经网络）
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"

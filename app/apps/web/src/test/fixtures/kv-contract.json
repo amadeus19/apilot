@@ -1,0 +1,69 @@
+{
+  "description": "用户数据 params/headers JSON 契约（kv-editor 组装 ⇄ Rust services/http/request 解析，双端钉住）：字符串字段对象数组 [{name,value,type?,description?,enabled?}]——type/description 为可选标注（容忍缺失或非字符串形态，发送面不消费，为 API 文档同步与后续阶段供料）；enabled 为行级启停（容忍缺失或非布尔形态，缺省启用，禁用行发送面全链路过滤）；空 name 行保存但发送时跳过；结构性非法形态（非数组 / 非字符串 name/value / 非 JSON）解析拒绝（fail-fast，不改写用户数据）。rows 行用存储形态字段（name/value/type?/description?/enabled?）；Rust 侧解析为引擎行模型（key←name、enabled 缺失＝启用）",
+  "cases": [
+    {
+      "name": "空数组",
+      "json": "[]",
+      "rows": []
+    },
+    {
+      "name": "常规多行",
+      "json": "[{\"name\":\"id\",\"value\":\"42\"},{\"name\":\"token\",\"value\":\"abc\"}]",
+      "rows": [
+        { "name": "id", "value": "42" },
+        { "name": "token", "value": "abc" }
+      ]
+    },
+    {
+      "name": "行带类型与说明（往返）",
+      "json": "[{\"name\":\"page\",\"value\":\"1\",\"type\":\"integer\",\"description\":\"页码\"},{\"name\":\"token\",\"value\":\"abc\",\"type\":\"string\",\"description\":\"鉴权令牌\"}]",
+      "rows": [
+        { "name": "page", "value": "1", "type": "integer", "description": "页码" },
+        { "name": "token", "value": "abc", "type": "string", "description": "鉴权令牌" }
+      ]
+    },
+    {
+      "name": "仅类型无说明（往返）",
+      "json": "[{\"name\":\"flag\",\"value\":\"true\",\"type\":\"boolean\"}]",
+      "rows": [{ "name": "flag", "value": "true", "type": "boolean" }]
+    },
+    {
+      "name": "非法 type 容忍（非字符串置空不报错）",
+      "json": "[{\"name\":\"a\",\"value\":\"1\",\"type\":123}]",
+      "rows": [{ "name": "a", "value": "1" }]
+    },
+    {
+      "name": "禁用行往返（enabled false 携带，缺失行不受影响）",
+      "json": "[{\"name\":\"token\",\"value\":\"abc\",\"enabled\":false},{\"name\":\"page\",\"value\":\"1\"}]",
+      "rows": [
+        { "name": "token", "value": "abc", "enabled": false },
+        { "name": "page", "value": "1" }
+      ]
+    },
+    {
+      "name": "显式启用行往返（enabled true 按存在性携带）",
+      "json": "[{\"name\":\"a\",\"value\":\"1\",\"enabled\":true}]",
+      "rows": [{ "name": "a", "value": "1", "enabled": true }]
+    },
+    {
+      "name": "非布尔 enabled 容忍（置缺省启用，不携带）",
+      "json": "[{\"name\":\"a\",\"value\":\"1\",\"enabled\":\"yes\"}]",
+      "rows": [{ "name": "a", "value": "1" }]
+    },
+    {
+      "name": "空名行保留（发送时跳过）",
+      "json": "[{\"name\":\"\",\"value\":\"x\"}]",
+      "rows": [{ "name": "", "value": "x" }]
+    },
+    {
+      "name": "值含特殊字符",
+      "json": "[{\"name\":\"q\",\"value\":\"a b&c=1\"}]",
+      "rows": [{ "name": "q", "value": "a b&c=1" }]
+    },
+    { "name": "非数组拒绝", "json": "{\"name\":\"a\"}", "invalid": true },
+    { "name": "行非对象拒绝", "json": "[\"a\"]", "invalid": true },
+    { "name": "字段非字符串拒绝", "json": "[{\"name\":1,\"value\":\"a\"}]", "invalid": true },
+    { "name": "缺字段拒绝", "json": "[{\"name\":\"a\"}]", "invalid": true },
+    { "name": "非法 JSON 拒绝", "json": "[{", "invalid": true }
+  ]
+}

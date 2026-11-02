@@ -1,0 +1,20 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "APilot 最小权限集：窗口控制、主题、DevTools、os、dialog（日志目录选择与响应保存对话框）、opener（Rust 侧直调，不经前端 ACL）与 process restart（备份恢复暂存后的立即重启）",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-theme",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-start-dragging",
+    "core:window:allow-close",
+    "core:window:allow-show",
+    "core:webview:allow-internal-toggle-devtools",
+    "os:default",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "process:allow-restart"
+  ]
+}
