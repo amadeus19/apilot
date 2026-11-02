@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "0.1.5"
+version = "0.9.0"
 description = "APilot 2.0 - Windows 优先的桌面 API 调试 / 接口测试 / 环境管理 / 接口工作流工具"
 authors = ["APilot"]
 license = ""

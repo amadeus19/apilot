@@ -21,7 +21,7 @@ const OWN_EXE = 'C:\\Apps\\APilot\\apilot.exe'
 function statusFixture(overrides: Partial<CliStatus> = {}): CliStatus {
   return {
     exePath: OWN_EXE,
-    version: '0.1.5',
+    version: '0.9.0',
     binaryAvailable: true,
     isDevBuild: false,
     registered: true,
@@ -60,7 +60,7 @@ beforeEach(() => {
     switch (cmd) {
       case 'get_diagnostics':
         return Promise.resolve({
-          version: '0.1.5',
+          version: '0.9.0',
           platform: 'windows',
           arch: 'x86_64',
           family: 'windows',
@@ -156,7 +156,7 @@ describe('设置「高级」CLI 开关（注册表真值镜像）', () => {
 
     expect(getToggle()).toHaveAttribute('aria-checked', 'false')
     expect(screen.getByTestId('cli-status-path-env-value')).toHaveTextContent('未注册')
-    expect(screen.getByTestId('cli-status-version-value')).toHaveTextContent('0.1.5')
+    expect(screen.getByTestId('cli-status-version-value')).toHaveTextContent('0.9.0')
     expect(screen.getByTestId('cli-status-path')).toHaveTextContent(OWN_EXE)
     expect(screen.getByRole('button', { name: '复制 CLI 路径' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /安装 CLI/ })).not.toBeInTheDocument()

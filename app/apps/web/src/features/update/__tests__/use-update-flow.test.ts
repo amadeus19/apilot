@@ -36,7 +36,7 @@ describe('useUpdateFlow（更新流程单一事实源）', () => {
     })
 
     // 其余状态清空可安装版本
-    invokeMock.mockResolvedValue({ status: 'up_to_date', latestVersion: '0.1.5', notes: null })
+    invokeMock.mockResolvedValue({ status: 'up_to_date', latestVersion: '0.9.0', notes: null })
     await useUpdateFlow.getState().checkUpdates()
     expect(useUpdateFlow.getState().availableVersion).toBeNull()
   })
