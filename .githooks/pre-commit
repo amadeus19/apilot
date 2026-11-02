@@ -1,0 +1,145 @@
+#!/bin/sh
+# 提交前钩子：把格式化与 lint 前移到提交点，代理与人工都无需单独执行这些命令。
+#
+# 行为约定：
+# - 行尾统一：暂存的文本类文件（ts/tsx/js/json/md/rs/sql 等）含 CRLF 时转为
+#   LF 后重新入暂存——仓库行尾口径统一为 LF（.gitattributes 声明 eol=lf），
+#   防外部工具写入的 CRLF 混入；存在未暂存改动的文件只提示不改写；
+# - 只处理本次暂存的 ts/tsx（app/ 范围内）做格式化与 lint，不做整仓扫描；
+# - 自动格式化：prettier 重写暂存文件并重新入暂存，提交内容即格式化结果；
+#   存在未暂存改动的文件跳过格式化——重写会把未暂存内容一并带进本次提交；
+# - lint 检查：按包跑 oxlint，出现 error（any / 渲染期 ref / effect 内 setState 等）拒绝提交；
+#   warning 放行（如 only-export-components）；
+# - 工具缺失（未执行 pnpm install）或处于合并提交时跳过，不因环境问题阻断提交；
+# - 旁路：git commit --no-verify。
+#
+# 完整门禁（typecheck / 单测 / cargo）在提交后按收尾清单执行，钩子只承担前移的格式化与 lint。
+
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+cd "$ROOT" || exit 0
+
+# 合并提交：暂存内容是冲突解决产物，钩子不介入改写
+[ -e "$(git rev-parse --git-path MERGE_HEAD)" ] && exit 0
+
+# —— 0. CLI 隔离断言：src/cli 暂存文件出现 tauri::/commands:: 即拒绝 ——
+CLI_RS=$(git diff --cached --name-only --diff-filter=ACMR | grep 'src-tauri/src/cli/.*\.rs$' || true)
+if [ -n "$CLI_RS" ]; then
+  if ! sh "$ROOT/app/scripts/check-cli-isolation.sh"; then
+    echo "[pre-commit] CLI 隔离断言未通过。"
+    exit 1
+  fi
+fi
+
+# —— 0.5 行尾统一：暂存文本文件工作区为 CRLF 时归一为 LF ——
+# 仓库行尾口径统一为 LF（.gitattributes 声明 eol=lf）；sqlx 迁移等按磁盘
+# 字节计算 checksum 的资产对行尾翻转敏感。检测走 git ls-files --eol 的权威
+# 判定（规避 shell 转义差异）；index 里的暂存内容已被 text 属性规范化为
+# LF，git checkout -- 即可把工作区文件按 LF 重写。与格式化段同一保护——
+# 存在未暂存改动的文件只提示不改写（checkout 会丢弃未暂存内容）。
+TEXT_EXT_RE='\.\(ts\|tsx\|js\|jsx\|mjs\|cjs\|json\|css\|scss\|html\|md\|rs\|sql\|toml\|yaml\|yml\|sh\|txt\)$'
+CRLF_FILES=$(git diff --cached --name-only --diff-filter=ACMR | grep "$TEXT_EXT_RE" || true)
+if [ -n "$CRLF_FILES" ]; then
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    [ -f "$f" ] || continue
+    if git ls-files --eol -- "$f" | grep -q 'w/crlf'; then
+      if git diff --quiet -- "$f"; then
+        # 先删再从 index 强制重建：checkout 系对「规范化后内容相同」的
+        # 文件会跳过写盘，删除绕开该优化；eol=lf 属性保证落盘字节为 LF。
+        # 此时文件已确认无未暂存改动，恢复内容与暂存内容必然一致。
+        if ! { rm -f -- "$f" && git checkout-index -f -- "$f"; }; then
+          echo "[pre-commit] 行尾归一失败：$f（可 git checkout -- 手动恢复，提交继续）"
+        else
+          echo "[pre-commit] 工作区行尾已归一为 LF：$f"
+        fi
+      else
+        echo "[pre-commit] 提示：$f 工作区为 CRLF 且有未暂存改动，本次未归一（请统一行尾后一并暂存）"
+      fi
+    fi
+  done <<EOF
+$CRLF_FILES
+EOF
+fi
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^app/.*\.(ts|tsx)$' || true)
+[ -n "$STAGED" ] || exit 0
+
+PRETTIER="$ROOT/app/node_modules/.bin/prettier"
+if [ ! -f "$PRETTIER" ]; then
+  echo "[pre-commit] 未找到 prettier（请先 pnpm install），跳过格式化与 lint 检查。"
+  exit 0
+fi
+
+# —— 1. 格式化：格式化可写回的文件，跳过存在未暂存改动的（防未暂存内容混入提交） ——
+FORMAT_SUB=""
+SKIP_LIST=""
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  if git diff --quiet -- "$f"; then
+    FORMAT_SUB="${FORMAT_SUB}${f#app/}
+"
+  else
+    SKIP_LIST="${SKIP_LIST}${f}
+"
+  fi
+done <<EOF
+$STAGED
+EOF
+
+if [ -n "$FORMAT_SUB" ]; then
+  set --
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    set -- "$@" "$f"
+  done <<EOF
+$FORMAT_SUB
+EOF
+  PRETTIER_OUT=$(cd "$ROOT/app" && "$PRETTIER" --write -- "$@" 2>&1) || {
+    echo "[pre-commit] prettier 执行失败："
+    printf '%s\n' "$PRETTIER_OUT"
+    exit 1
+  }
+  # prettier 对未改动的文件标注 (unchanged)：其余即本次被重写的文件（去掉耗时后缀）
+  RESHAPED=$(printf '%s\n' "$PRETTIER_OUT" | grep -v '(unchanged)' | sed 's/ [0-9]*ms$//' || true)
+  if [ -n "$RESHAPED" ]; then
+    (cd "$ROOT/app" && git add -- "$@")
+    echo "[pre-commit] 已格式化并重新入暂存："
+    printf '%s\n' "$RESHAPED" | sed 's/^/  /'
+  fi
+fi
+
+if [ -n "$SKIP_LIST" ]; then
+  echo "[pre-commit] 以下文件存在未暂存改动，跳过自动格式化（请先 pnpm format 或一并暂存）："
+  printf '%s' "$SKIP_LIST" | sed 's/^/  /'
+fi
+
+# —— 2. lint：按包跑各自 oxlint，只拦 error ——
+LINT_FAIL=0
+for PKG in app/apps/* app/packages/*; do
+  [ -d "$PKG" ] || continue
+  OXLINT="$ROOT/$PKG/node_modules/.bin/oxlint"
+  [ -f "$OXLINT" ] || continue
+  LIST=$(printf '%s\n' "$STAGED" | grep -E "^${PKG}/" || true)
+  [ -n "$LIST" ] || continue
+  set --
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    set -- "$@" "${f#"$PKG"/}"
+  done <<EOF
+$LIST
+EOF
+  # 通过时保持安静，失败时完整呈现诊断
+  if ! OXLINT_OUT=$(cd "$PKG" && "$OXLINT" "$@" 2>&1); then
+    printf '%s\n' "$OXLINT_OUT"
+    LINT_FAIL=1
+  fi
+done
+
+if [ "$LINT_FAIL" -ne 0 ]; then
+  echo ""
+  echo "[pre-commit] lint 未通过：修复以上 error 后重新提交。"
+  exit 1
+fi
+
+echo "[pre-commit] 格式化与 lint 检查通过。"
+exit 0

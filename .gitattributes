@@ -1,0 +1,12 @@
+###############################################################################
+# Set default behavior to automatically normalize line endings.
+# 全仓行尾统一为 LF（eol=lf 覆盖本机 core.autocrlf 的 CRLF 转换，消除
+# 「LF will be replaced by CRLF」警告）；sqlx 迁移等按磁盘字节计算
+# checksum 的资产对行尾翻转敏感（曾致 0013 台账与工作区不一致）。
+###############################################################################
+* text=auto eol=lf
+
+###############################################################################
+# git hooks must maintain LF line endings (CRLF would cause sh to fail to interpret)
+###############################################################################
+.githooks/* text eol=lf
