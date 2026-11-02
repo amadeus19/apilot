@@ -27,9 +27,10 @@ pub async fn check_update_source(path: String) -> Result<(), AppError> {
     crate::services::update_source::check_reachable(&path).await
 }
 
-/// 检查更新：读 `updateSource` 设置指向的清单并与当前
-/// 版本比较，按状态返回（not_configured / unreachable / invalid_manifest /
-/// up_to_date / newer_available）。只读清单不下载。
+/// 检查更新：读 `updateSource` 设置指向的清单（本机文件夹 / 云端
+/// GitHub Release，按 `kind` 分流）并与当前版本比较，按状态返回
+/// （not_configured / unreachable / invalid_manifest / up_to_date /
+/// newer_available / downgrade_available）。只读清单不下载。
 #[tauri::command]
 pub async fn check_updates(state: State<'_, AppState>) -> Result<Value, AppError> {
     let update_source = state
@@ -42,8 +43,9 @@ pub async fn check_updates(state: State<'_, AppState>) -> Result<Value, AppError
         .map_err(|err| AppError::internal(format!("serialize check result: {err}")))
 }
 
-/// 下载更新包（两段式之一）：复制清单 `file` 到临时目录并做
-/// sha256 / minisign 签名双重校验，全过返回落盘路径；任一失败拒绝安装。
+/// 下载更新包（两段式之一）：按 `kind` 分流——本机源复制清单 `file`，
+/// 云端源经 HTTPS 拉取（镜像前缀同套）；两者统一做 sha256 / minisign
+/// 签名校验，全过返回暂存信息；任一失败拒绝安装。
 #[tauri::command]
 pub async fn download_update(state: State<'_, AppState>) -> Result<Value, AppError> {
     let update_source = state

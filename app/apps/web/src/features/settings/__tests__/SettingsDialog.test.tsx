@@ -7,6 +7,7 @@ import { createQueryWrapper } from '@/test/render-providers'
 import { Toaster } from '@workspace/ui/components'
 import { useAppStore } from '@/stores/app.store'
 import { useSettingsStore } from '@/stores/settings.store'
+import { DEFAULT_CLOUD_BASE_URL } from '@/lib/settings-schema'
 import { SettingsDialog } from '../SettingsDialog'
 
 // Tauri / IPC 依赖替换：面板交互不触达窗口 API；setSetting 走 store 落库协议
@@ -312,17 +313,18 @@ describe('SettingsDialog', () => {
     expect(screen.getByRole('button', { name: '恢复默认' })).toBeEnabled()
   })
 
-  it('更新源：云服务禁用占位；UNC 校验成功保存、失败阻止落库', async () => {
+  it('更新源：云服务解禁可选；文件夹 UNC 校验成功保存、失败阻止落库', async () => {
     const user = userEvent.setup()
     openSettings()
     await user.click(screen.getByRole('button', { name: /开发者/ }))
     await user.click(screen.getByRole('switch', { name: '开发者模式' }))
 
-    // 云服务禁用占位（不可选）
-    expect(screen.getByRole('button', { name: '云服务' })).toBeDisabled()
+    // 云服务解禁（占位移除）：选中即现仓库地址表单，预填默认仓库地址
+    await user.click(screen.getByRole('button', { name: '云服务' }))
+    expect(screen.getByLabelText('仓库地址')).toHaveValue(DEFAULT_CLOUD_BASE_URL)
 
-    // 切到局域网共享，输入 UNC
-    await user.click(screen.getByRole('button', { name: '局域网共享' }))
+    // 切回文件夹，手输 UNC
+    await user.click(screen.getByRole('button', { name: '文件夹' }))
     const uncInput = screen.getByRole('textbox', {
       name: '例如 \\\\server\\public\\apilot-updates',
     })
@@ -343,12 +345,12 @@ describe('SettingsDialog', () => {
       expect.objectContaining({ key: 'updateSource' }),
     )
 
-    // 校验成功：整键落库 + 确认 toast
+    // 校验成功：整键落库（kind 判别形态）+ 确认 toast
     await user.click(screen.getByRole('button', { name: '保存' }))
     await vi.waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith('set_setting', {
         key: 'updateSource',
-        value: { type: 'network', path: '\\\\server\\share' },
+        value: { kind: 'folder', path: '\\\\server\\share', baseUrl: null, mirrorPrefix: '' },
       })
     })
     expect(await screen.findByText('更新源已保存')).toBeInTheDocument()

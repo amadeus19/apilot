@@ -33,9 +33,9 @@ const STAGED = {
     installFailed: null,
   },
   installFailed: {
-    ready: { version: '0.1.5' },
+    ready: { version: '0.9.0' },
     finished: null,
-    installFailed: { version: '0.1.5' },
+    installFailed: { version: '0.9.0' },
   },
 } as const
 
@@ -91,6 +91,20 @@ describe('presentCheckToast（检查结果全状态反馈）', () => {
       },
     )
   })
+
+  it('cloud 源：发现新版文案切「可下载安装」分支（不再引导去更新源获取）', () => {
+    useSettingsStore.setState({
+      updateSource: { kind: 'cloud', path: null, baseUrl: null, mirrorPrefix: '' },
+    })
+    presentCheckToast(RESULT.newer)
+    expect(toast.info).toHaveBeenCalledWith('发现新版本 0.1.1，可下载安装', {
+      description: '修复若干问题',
+    })
+
+    // 其余状态沿用中性文案
+    presentCheckToast(RESULT.upToDate)
+    expect(toast.success).toHaveBeenCalledWith('当前已是最新版本')
+  })
 })
 
 describe('scheduleStartupUpdateSweep（boot 扫场：反馈 / 续接 / 完成提示 / 自动检查）', () => {
@@ -121,8 +135,8 @@ describe('scheduleStartupUpdateSweep（boot 扫场：反馈 / 续接 / 完成提
   it('上次安装未完成：一次性失败反馈后照常续接就绪包（可重试）', async () => {
     stagedImpl(STAGED.installFailed)
     await advance()
-    expect(toast.error).toHaveBeenCalledWith('上次安装（v0.1.5）未完成，可重新安装')
-    expect(useUpdatePromptStore.getState().pending).toMatchObject({ version: '0.1.5' })
+    expect(toast.error).toHaveBeenCalledWith('上次安装（v0.9.0）未完成，可重新安装')
+    expect(useUpdatePromptStore.getState().pending).toMatchObject({ version: '0.9.0' })
     expect(invokeMock).not.toHaveBeenCalledWith('check_updates')
   })
 

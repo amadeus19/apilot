@@ -10,7 +10,12 @@ export const THEME_PREFERENCES = ['light', 'dark', 'system'] as const
 export const ACCENTS = ['indigo', 'teal', 'violet', 'orange', 'rose', 'graphite'] as const
 export const LOCALES = ['system', 'zh-CN', 'en'] as const
 export const LOG_LEVELS = ['error', 'warn', 'info', 'debug'] as const
-export const UPDATE_SOURCE_TYPES = ['cloud', 'local', 'network'] as const
+export const UPDATE_SOURCE_KINDS = ['folder', 'cloud'] as const
+/** 存量配置的类型枚举（folder/cloud 两分前的 local/network/cloud 三分），
+ * 仅作旧库 `type` 字段的兼容解析输入，不再对外写入 */
+const UPDATE_SOURCE_LEGACY_TYPES = ['cloud', 'local', 'network'] as const
+/** cloud 源默认仓库地址（baseUrl 落库 null = 使用该默认，用户可改可删） */
+export const DEFAULT_CLOUD_BASE_URL = 'https://github.com/amadeus19/apilot'
 /** 超时分段档位（不限制＝null 不入枚举，四档含默认由 UI 控件保证） */
 export const HTTP_TIMEOUT_STEPS = [10, 30, 60] as const
 export const HTTP_PROXY_MODES = ['none', 'custom'] as const
@@ -19,7 +24,7 @@ export type ThemePreference = (typeof THEME_PREFERENCES)[number]
 export type AccentName = (typeof ACCENTS)[number]
 export type LocalePreference = (typeof LOCALES)[number]
 export type LogLevel = (typeof LOG_LEVELS)[number]
-export type UpdateSourceType = (typeof UPDATE_SOURCE_TYPES)[number]
+export type UpdateSourceKind = (typeof UPDATE_SOURCE_KINDS)[number]
 export type HttpTimeoutStep = (typeof HTTP_TIMEOUT_STEPS)[number]
 export type HttpProxyMode = (typeof HTTP_PROXY_MODES)[number]
 export type ResolvedTheme = Exclude<ThemePreference, 'system'>
@@ -32,11 +37,18 @@ export type DevModeSetting = { enabled: boolean }
 export type LogLevelSetting = { level: LogLevel }
 /** settings 键 `logDir`：null = 默认目录（LocalAppData），重启生效 */
 export type LogDirSetting = { path: string | null }
-/** settings 键 `updateSource`：软件版本更新渠道。
- * 云类型 path 可空（后续版本对接）；local/network path = 目录（保存前 Rust 校验）。
- * 「更新源」与同步（Sync）域的「更新」无关。
+/** settings 键 `updateSource`：软件版本更新渠道，kind 为来源判别字段。
+ * folder 源用 path（本机 / UNC 目录，保存前 Rust 校验可达）；
+ * cloud 源用 baseUrl（null = 默认仓库地址）与 mirrorPrefix（'' = 直连）。
+ * 两类字段同键共存：切换类型落库时只改本类字段，另一类配置原样保留，
+ * 切回即恢复。与同步（Sync）域的「更新」无关。
  */
-export type UpdateSourceSetting = { type: UpdateSourceType; path: string | null }
+export type UpdateSourceSetting = {
+  kind: UpdateSourceKind
+  path: string | null
+  baseUrl: string | null
+  mirrorPrefix: string
+}
 /** settings 键 `autoCheckUpdates`：boot 后自动检查更新开关（关 = 仅手动检查） */
 export type AutoCheckUpdatesSetting = { enabled: boolean }
 /** settings 键 `shell.leftPanelWidth`：左栏宽度持久化（px；null = 未定制） */
@@ -82,9 +94,16 @@ const logDirSettingSchema: z.ZodType<Partial<LogDirSetting>> = z.object({
   path: z.string().nullable().optional(),
 })
 
-const updateSourceSettingSchema: z.ZodType<Partial<UpdateSourceSetting>> = z.object({
-  type: z.enum(UPDATE_SOURCE_TYPES).optional(),
+/**
+ * updateSource 载荷宽容形态：kind 判别（现行）+ type 存量兼容 + 两类专属字段。
+ * 解析与规范化在 parseUpdateSource（输出类型含判别推导，泛型 parseOne 不适配）。
+ */
+const updateSourceCompatSchema = z.object({
+  kind: z.enum(UPDATE_SOURCE_KINDS).optional(),
+  type: z.enum(UPDATE_SOURCE_LEGACY_TYPES).optional(),
   path: z.string().nullable().optional(),
+  baseUrl: z.string().nullable().optional(),
+  mirrorPrefix: z.string().optional(),
 })
 
 const autoCheckUpdatesSettingSchema: z.ZodType<Partial<AutoCheckUpdatesSetting>> = z.object({
@@ -128,7 +147,7 @@ export const SETTINGS_DEFAULTS = {
   devMode: { enabled: false },
   logLevel: { level: 'info' },
   logDir: { path: null },
-  updateSource: { type: 'local', path: null },
+  updateSource: { kind: 'folder', path: null, baseUrl: null, mirrorPrefix: '' },
   autoCheckUpdates: { enabled: true },
   shell: { width: null },
   keybindings: {},
@@ -175,6 +194,44 @@ function parseOne<T extends object>(
 }
 
 /**
+ * updateSource 专用解析（规范化输出）：判别字段 kind 缺失时由存量 type 推导
+ * （cloud→cloud，local/network→folder）——旧库 `{type,path}` 形态升级后 folder
+ * 配置零丢失；非法 kind / type / 字段类型整体判脏回退默认。baseUrl 非字符串
+ * 视为未配置（null = 默认仓库地址），mirrorPrefix 缺失视为直连（''）。
+ */
+function parseUpdateSource(value: unknown, invalidKeys: string[]): UpdateSourceSetting {
+  const defaults = SETTINGS_DEFAULTS.updateSource
+  if (value === undefined) return { ...defaults }
+  const result = updateSourceCompatSchema.safeParse(value)
+  if (!result.success) {
+    invalidKeys.push('updateSource')
+    return { ...defaults }
+  }
+  const raw = result.data
+  const kind: UpdateSourceKind = raw.kind ?? (raw.type === 'cloud' ? 'cloud' : 'folder')
+  return {
+    kind,
+    path: raw.path ?? null,
+    baseUrl: raw.baseUrl ?? null,
+    mirrorPrefix: raw.mirrorPrefix ?? '',
+  }
+}
+
+/**
+ * cloud 源地址形态校验（保存闸门与表单禁用态共用）：空值放行（baseUrl 空 =
+ * 默认仓库地址、mirrorPrefix 空 = 直连），非空须为 http(s) 绝对地址。
+ */
+export function isValidCloudSourceUrl(value: string): boolean {
+  if (value === '') return true
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' || url.protocol === 'http:'
+  } catch {
+    return false
+  }
+}
+
+/**
  * 解析 boot 载荷中的 settings 全量：逐键 safeParse，失败键回退默认并登记。
  * 「整体脏」与「单键脏」都只影响对应键（部分损坏不放大为整体回退）。
  */
@@ -213,13 +270,7 @@ export function parseSettings(raw: Record<string, unknown> | null | undefined): 
       SETTINGS_DEFAULTS.logDir,
       invalidKeys,
     ),
-    updateSource: parseOne(
-      updateSourceSettingSchema,
-      raw.updateSource,
-      'updateSource',
-      SETTINGS_DEFAULTS.updateSource,
-      invalidKeys,
-    ),
+    updateSource: parseUpdateSource(raw.updateSource, invalidKeys),
     http: parseOne(httpSettingSchema, raw.http, 'http', SETTINGS_DEFAULTS.http, invalidKeys),
     autoCheckUpdates: parseOne(
       autoCheckUpdatesSettingSchema,

@@ -48,8 +48,13 @@ pub mod codes {
     // —— 更新链路（按失败阶段切分）——
     /// 更新源未配置 / 类型未对接
     pub const UPDATE_SOURCE_NOT_CONFIGURED: &str = "UPDATE_SOURCE_NOT_CONFIGURED";
-    /// 源目录不可达（保存前校验与检查阶段）
+    /// 源目录不可达（保存前校验与检查阶段；云端语境含 401/403 等源侧拒绝）
     pub const UPDATE_SOURCE_UNREACHABLE: &str = "UPDATE_SOURCE_UNREACHABLE";
+    /// 云端清单 / 资产在源上不存在（HTTP 404，终态不重试——latest 通道无
+    /// 正式 Release 或未挂对应资产）
+    pub const UPDATE_SOURCE_NOT_FOUND: &str = "UPDATE_SOURCE_NOT_FOUND";
+    /// 云端请求可重试失败（网络错 / 超时 / 429 / 5xx）退避重试耗尽
+    pub const UPDATE_SOURCE_RETRIES_EXHAUSTED: &str = "UPDATE_SOURCE_RETRIES_EXHAUSTED";
     /// manifest.json 文件读不到（下载阶段；检查阶段归 unreachable 状态）
     pub const UPDATE_MANIFEST_UNREADABLE: &str = "UPDATE_MANIFEST_UNREADABLE";
     /// 清单损坏（非法 JSON / manifestVersion 不支持 / 缺当前平台条目）

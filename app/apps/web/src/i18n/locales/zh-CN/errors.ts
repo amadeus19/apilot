@@ -18,6 +18,8 @@ export const errors = {
   CLI_PATH_REGISTRY_FAILED: 'PATH 注册表读写失败，请重试',
   UPDATE_SOURCE_NOT_CONFIGURED: '尚未配置更新源',
   UPDATE_SOURCE_UNREACHABLE: '更新源路径不可达，请检查后重试',
+  UPDATE_SOURCE_NOT_FOUND: '云端清单或安装包不存在，请确认仓库已发布对应版本',
+  UPDATE_SOURCE_RETRIES_EXHAUSTED: '云端请求多次失败，请检查网络后重试',
   UPDATE_MANIFEST_UNREADABLE: '无法读取更新源清单，请检查更新源',
   UPDATE_MANIFEST_INVALID: '更新源清单无效或缺少当前平台条目',
   UPDATE_PACKAGE_UNREADABLE: '无法读取更新包文件',

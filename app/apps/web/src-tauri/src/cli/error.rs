@@ -98,6 +98,8 @@ pub(crate) fn exit_code_for(code: &str) -> i32 {
         // 更新链路
         | codes::UPDATE_SOURCE_NOT_CONFIGURED
         | codes::UPDATE_SOURCE_UNREACHABLE
+        | codes::UPDATE_SOURCE_NOT_FOUND
+        | codes::UPDATE_SOURCE_RETRIES_EXHAUSTED
         | codes::UPDATE_MANIFEST_UNREADABLE
         | codes::UPDATE_MANIFEST_INVALID
         | codes::UPDATE_PACKAGE_UNREADABLE

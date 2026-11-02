@@ -27,14 +27,22 @@ function t(key: Parameters<typeof translate>[1], params?: Record<string, string 
   return translate(selectResolvedLocale(useSettingsStore.getState()), key, params)
 }
 
-/** 检查结果反馈（全状态文案）：流程状态机与自动检查共用 */
+/** 检查结果反馈（全状态文案）：流程状态机与自动检查共用。
+ * 发现新版的去向按当前更新源类型分叉：folder 源由用户到源目录获取，
+ * cloud 源由应用直接从仓库下载安装，文案随之区分。 */
 export function presentCheckToast(result: CheckUpdatesResult): void {
+  const cloudSource = useSettingsStore.getState().updateSource.kind === 'cloud'
   switch (result.status) {
     case 'newer_available':
       // 无说明时不传选项（toast 调用形态保持单一）
-      toast.info(t('settings.checkUpdateAvailable', { version: result.latestVersion ?? '' }), {
-        description: result.notes ?? undefined,
-      })
+      toast.info(
+        t(cloudSource ? 'settings.checkUpdateAvailableCloud' : 'settings.checkUpdateAvailable', {
+          version: result.latestVersion ?? '',
+        }),
+        {
+          description: result.notes ?? undefined,
+        },
+      )
       break
     case 'downgrade_available':
       // 回滚是用户主动发起的关注点，自动检查静默（不弹），只影响手动检查反馈

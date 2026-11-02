@@ -6,7 +6,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  Input,
   Switch,
   ToggleGroup,
   ToggleGroupItem,
@@ -20,25 +19,15 @@ import { appLogDir } from '@tauri-apps/api/path'
 import { useI18n } from '@/i18n'
 import { useIpcMutation, useIpcQuery } from '@/services/ipc-query'
 import { localizeIpcError, reportError } from '@/services/error-center'
-import {
-  checkUpdateSource,
-  getCliStatus,
-  getDiagnostics,
-  registerCliPath,
-  unregisterCliPath,
-} from '@/services/ipc'
+import { getCliStatus, getDiagnostics, registerCliPath, unregisterCliPath } from '@/services/ipc'
 import { openLogDirectory, pickDirectory } from '@/services/log-dir'
-import {
-  LOG_LEVELS,
-  UPDATE_SOURCE_TYPES,
-  type LogLevel,
-  type UpdateSourceSetting,
-} from '@/lib/settings-schema'
+import { LOG_LEVELS, type LogLevel } from '@/lib/settings-schema'
 import { useSettingsStore } from '@/stores/settings.store'
 import { useTabsStore } from '@/stores/tabs.store'
 import { useCommandsStore } from '@/features/commands/commands.store'
 import { SettingRow, SettingRows } from '@/components/common/SettingRow'
 import { CliStatusBlock } from './CliStatusBlock'
+import { UpdateSourceForm } from './UpdateSourceForm'
 
 /**
  * 开发者组：devMode 开关**常驻**（关掉后仍能再打开），
@@ -189,46 +178,7 @@ export function DeveloperSection() {
     registerMutation.mutate()
   }
 
-  // —— 更新源：类型三选（云禁用占位）+ 路径，保存前 Rust 可达性校验 ——
-  const updateSource = useSettingsStore((s) => s.updateSource)
-  const setUpdateSource = useSettingsStore((s) => s.setUpdateSource)
-  // 未保存编辑态：类型切换 / UNC 输入改本地态，保存（或选目录）时校验后整键落库。
-  // UNC 输入框初始值仅取 network 类型的存量路径——local 与 network 的 path
-  // 语义不同（本机盘符路径 ≠ UNC），跨类型预填会诱导把本机路径误存为网络源
-  const [uiType, setUiType] = React.useState(updateSource.type)
-  const [networkPath, setNetworkPath] = React.useState(
-    updateSource.type === 'network' ? (updateSource.path ?? '') : '',
-  )
-  // 校验中（防重复提交）
-  const [savingSource, setSavingSource] = React.useState(false)
-
-  /** 保存（local/network）：可达性校验失败 toast 报错并阻止保存（带病保存无意义） */
-  const saveUpdateSource = async (setting: UpdateSourceSetting): Promise<void> => {
-    setSavingSource(true)
-    try {
-      await checkUpdateSource(setting.path ?? '')
-    } catch (error) {
-      reportError(error)
-      return
-    } finally {
-      setSavingSource(false)
-    }
-    setUpdateSource(setting)
-    toast.success(t('settings.updateSourceSaved'))
-  }
-
-  /** 本机文件夹：选完目录即校验 + 落库；取消静默；选择器失败走统一上报 */
-  const chooseLocalSource = async (): Promise<void> => {
-    let picked: string | null
-    try {
-      picked = await pickDirectory()
-    } catch (error) {
-      reportError(error)
-      return
-    }
-    if (!picked) return
-    await saveUpdateSource({ type: 'local', path: picked })
-  }
+  // —— 更新源：类型与表单在 UpdateSourceForm（folder / cloud 两分）——
 
   return (
     <section aria-label={t('settings.navDeveloper')} className="p-6">
@@ -339,93 +289,9 @@ export function DeveloperSection() {
                 }
               />
 
-              {/* 更新源：类型三选；下方路径区随类型变化。
-                  「更新源」=软件版本更新渠道，与同步域「更新」无关 */}
-              <SettingRow
-                label={t('settings.updateSourceLabel')}
-                description={t('settings.updateSourceDesc')}
-                control={
-                  <ToggleGroup
-                    variant="outline"
-                    value={[uiType]}
-                    onValueChange={(values) => {
-                      const latest = values[0]
-                      if (
-                        typeof latest === 'string' &&
-                        (UPDATE_SOURCE_TYPES as readonly string[]).includes(latest)
-                      ) {
-                        setUiType(latest as UpdateSourceSetting['type'])
-                      }
-                    }}
-                    aria-label={t('settings.updateSourceLabel')}
-                  >
-                    {/* 云服务留坑（Out of scope）：禁用占位不可选 */}
-                    <ToggleGroupItem value="cloud" disabled className="px-3 text-xs">
-                      {t('settings.updateSourceCloud')}
-                    </ToggleGroupItem>
-                    <ToggleGroupItem value="local" className="px-3 text-xs">
-                      {t('settings.updateSourceLocal')}
-                    </ToggleGroupItem>
-                    <ToggleGroupItem value="network" className="px-3 text-xs">
-                      {t('settings.updateSourceNetwork')}
-                    </ToggleGroupItem>
-                  </ToggleGroup>
-                }
-              />
-
-              {/* 路径区：与 SettingRow 同款布局（label 域承载动态内容，不用其 string API） */}
-              <div className="flex items-center justify-between gap-6 px-4 py-3.5">
-                {uiType === 'cloud' && (
-                  <p className="min-w-0 text-xs text-muted-foreground">
-                    {t('settings.updateSourceCloudPlaceholder')}
-                  </p>
-                )}
-                {uiType === 'local' && (
-                  <>
-                    <p className="min-w-0 truncate font-mono text-xs text-muted-foreground">
-                      {updateSource.type === 'local' && updateSource.path
-                        ? updateSource.path
-                        : t('settings.updateSourceNone')}
-                    </p>
-                    <div className="shrink-0">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => void chooseLocalSource()}
-                        disabled={savingSource}
-                      >
-                        {t('settings.updateSourceChoose')}
-                      </Button>
-                    </div>
-                  </>
-                )}
-                {uiType === 'network' && (
-                  <>
-                    <div className="min-w-0 flex-1">
-                      <Input
-                        type="text"
-                        value={networkPath}
-                        onChange={(event) => setNetworkPath(event.target.value)}
-                        placeholder={t('settings.updateSourcePathPlaceholder')}
-                        className="h-9 font-mono text-xs"
-                        aria-label={t('settings.updateSourcePathPlaceholder')}
-                      />
-                    </div>
-                    <div className="shrink-0">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={savingSource || networkPath.trim().length === 0}
-                        onClick={() =>
-                          void saveUpdateSource({ type: 'network', path: networkPath.trim() })
-                        }
-                      >
-                        {t('settings.updateSourceSave')}
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </div>
+              {/* 更新源：类型切换（folder / cloud）与随类型的配置表单
+                  （可达性校验、默认地址、镜像前缀），见 UpdateSourceForm */}
+              <UpdateSourceForm />
             </>
           )}
         </SettingRows>

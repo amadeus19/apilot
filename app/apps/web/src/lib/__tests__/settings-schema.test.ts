@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { parseSettings, resolveLocale, resolveTheme, SETTINGS_DEFAULTS } from '../settings-schema'
+import {
+  isValidCloudSourceUrl,
+  parseSettings,
+  resolveLocale,
+  resolveTheme,
+  SETTINGS_DEFAULTS,
+} from '../settings-schema'
 
 describe('parseSettings（Zod 校验）', () => {
   it('合法载荷逐键解析', () => {
@@ -10,7 +16,7 @@ describe('parseSettings（Zod 校验）', () => {
       devMode: { enabled: true },
       logLevel: { level: 'debug' },
       logDir: { path: 'D:\\Logs' },
-      updateSource: { type: 'network', path: '\\\\server\\share' },
+      updateSource: { kind: 'folder', path: '\\\\server\\share', baseUrl: null, mirrorPrefix: '' },
       autoCheckUpdates: { enabled: false },
     })
     expect(parsed.theme).toEqual({ preference: 'dark', accent: 'teal' })
@@ -18,7 +24,12 @@ describe('parseSettings（Zod 校验）', () => {
     expect(parsed.devMode).toEqual({ enabled: true })
     expect(parsed.logLevel).toEqual({ level: 'debug' })
     expect(parsed.logDir).toEqual({ path: 'D:\\Logs' })
-    expect(parsed.updateSource).toEqual({ type: 'network', path: '\\\\server\\share' })
+    expect(parsed.updateSource).toEqual({
+      kind: 'folder',
+      path: '\\\\server\\share',
+      baseUrl: null,
+      mirrorPrefix: '',
+    })
     expect(parsed.autoCheckUpdates).toEqual({ enabled: false })
     expect(parsed.invalidKeys).toEqual([])
   })
@@ -55,20 +66,75 @@ describe('parseSettings（Zod 校验）', () => {
     expect(broken.invalidKeys).toEqual(['logDir'])
   })
 
-  it('updateSource：三类型枚举校验，云类型 path 可空；非法类型回退并登记', () => {
-    expect(parseSettings({ updateSource: { type: 'cloud', path: null } }).updateSource).toEqual({
-      type: 'cloud',
+  it('updateSource：kind 判别模型全字段解析（folder 用 path，cloud 用 baseUrl/mirrorPrefix）', () => {
+    expect(
+      parseSettings({
+        updateSource: {
+          kind: 'cloud',
+          path: null,
+          baseUrl: 'https://git.example.com/apilot',
+          mirrorPrefix: 'https://mirror.example.com/',
+        },
+      }).updateSource,
+    ).toEqual({
+      kind: 'cloud',
       path: null,
+      baseUrl: 'https://git.example.com/apilot',
+      mirrorPrefix: 'https://mirror.example.com/',
     })
+    // baseUrl null = 默认仓库地址、mirrorPrefix 缺省 = 直连（''）
+    expect(parseSettings({ updateSource: { kind: 'cloud', baseUrl: null } }).updateSource).toEqual({
+      kind: 'cloud',
+      path: null,
+      baseUrl: null,
+      mirrorPrefix: '',
+    })
+  })
+
+  it('updateSource：存量 type 形态兼容解析（folder 配置零丢失，cloud 推导）', () => {
+    // local / network 均为目录源，统一推导为 folder
+    expect(
+      parseSettings({ updateSource: { type: 'network', path: '\\\\s\\u' } }).updateSource,
+    ).toEqual({ kind: 'folder', path: '\\\\s\\u', baseUrl: null, mirrorPrefix: '' })
     expect(
       parseSettings({ updateSource: { type: 'local', path: 'D:\\updates' } }).updateSource,
-    ).toEqual({
-      type: 'local',
-      path: 'D:\\updates',
+    ).toEqual({ kind: 'folder', path: 'D:\\updates', baseUrl: null, mirrorPrefix: '' })
+    expect(parseSettings({ updateSource: { type: 'cloud', path: null } }).updateSource).toEqual({
+      kind: 'cloud',
+      path: null,
+      baseUrl: null,
+      mirrorPrefix: '',
     })
-    const broken = parseSettings({ updateSource: { type: 'ftp' } })
-    expect(broken.updateSource).toEqual(SETTINGS_DEFAULTS.updateSource)
-    expect(broken.invalidKeys).toEqual(['updateSource'])
+  })
+
+  it('updateSource：kind 与存量 type 同时存在时 kind 优先', () => {
+    expect(
+      parseSettings({ updateSource: { kind: 'cloud', type: 'local', path: 'D:\\x' } }).updateSource
+        .kind,
+    ).toBe('cloud')
+  })
+
+  it('updateSource：非法 kind / type / 字段类型整体判脏回退默认并登记', () => {
+    const brokenKind = parseSettings({ updateSource: { kind: 'ftp' } })
+    expect(brokenKind.updateSource).toEqual(SETTINGS_DEFAULTS.updateSource)
+    expect(brokenKind.invalidKeys).toEqual(['updateSource'])
+
+    const brokenType = parseSettings({ updateSource: { type: 'ftp' } })
+    expect(brokenType.updateSource).toEqual(SETTINGS_DEFAULTS.updateSource)
+    expect(brokenType.invalidKeys).toEqual(['updateSource'])
+
+    const brokenField = parseSettings({ updateSource: { kind: 'cloud', mirrorPrefix: 42 } })
+    expect(brokenField.updateSource).toEqual(SETTINGS_DEFAULTS.updateSource)
+    expect(brokenField.invalidKeys).toEqual(['updateSource'])
+  })
+
+  it('isValidCloudSourceUrl：空值放行（默认语义），非空须 http(s) 绝对地址', () => {
+    expect(isValidCloudSourceUrl('')).toBe(true)
+    expect(isValidCloudSourceUrl('https://github.com/amadeus19/apilot')).toBe(true)
+    expect(isValidCloudSourceUrl('http://mirror.lan/apilot')).toBe(true)
+    expect(isValidCloudSourceUrl('ftp://mirror.example.com')).toBe(false)
+    expect(isValidCloudSourceUrl('github.com/amadeus19/apilot')).toBe(false)
+    expect(isValidCloudSourceUrl('not a url')).toBe(false)
   })
 
   it('autoCheckUpdates：布尔开关校验，缺失 = 默认开启，非法回退并登记', () => {

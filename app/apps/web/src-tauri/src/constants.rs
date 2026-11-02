@@ -46,6 +46,28 @@ pub const UPDATE_SOURCE_CHECK_TIMEOUT_MS: u64 = 5000;
 /// 撑爆内存/磁盘——一切缓冲有界）；现产物约 4MB，256MB 为远超需求的护栏
 pub const MAX_UPDATE_FILE_BYTES: u64 = 256 * 1024 * 1024;
 
+/// 云端更新请求连接超时（清单与资产统一：连接层成败通常亚秒级，
+/// 10s 容公网抖动与镜像回源）
+pub const UPDATE_CLOUD_CONNECT_TIMEOUT_MS: u64 = 10_000;
+
+/// 云端清单请求总超时（从连接到清单 body 读完；清单为 KB 级小对象，
+/// 30s 远超常态）——资产下载**不设**总超时（时长不可预估），见下行
+pub const UPDATE_CLOUD_MANIFEST_TIMEOUT_MS: u64 = 30_000;
+
+/// 云端资产下载单次读超时（读成功即重置）：大文件不设总超时的前提下，
+/// 以此检测僵死连接（对端静默不发包的最长在途时长）
+pub const UPDATE_CLOUD_READ_TIMEOUT_MS: u64 = 30_000;
+
+/// 云端请求可重试失败（网络错 / 429 / 5xx）的额外尝试次数：首次 + 2 次重试
+/// （GitHub 资产间歇 503 egress 实证重试即可成功；404 为终态不重试）
+pub const UPDATE_CLOUD_RETRY_ATTEMPTS: u32 = 2;
+
+/// 云端重试指数退避基数：第 n 次重试等待 `基数 × 4^(n-1)`（1s → 4s）
+pub const UPDATE_CLOUD_RETRY_BASE_DELAY_MS: u64 = 1_000;
+
+/// 429 Retry-After 响应头的封顶秒数（防异常大值把检查挂死）
+pub const UPDATE_CLOUD_RETRY_AFTER_CAP_SECS: u64 = 30;
+
 // —— 工作台领域（七表 CRUD，Phase 3）——
 
 /// 领域实体名称长度上限（工作空间/服务/分类/接口标题共用，字节）：

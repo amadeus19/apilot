@@ -20,12 +20,12 @@ const SNAPSHOT: Readonly<Record<string, readonly [count: number, hash: string]>>
   common: [9, '6b0ed5edfac7169a'],
   contextmenu: [6, '0609797edca70db3'],
   editor: [101, '7a598ccdc028ac18'],
-  errors: [76, '3a00983f8d593af8'],
+  errors: [78, '00b1d54c2526c3d8'],
   history: [29, 'd3991c5d4713c57d'],
   historyDetail: [22, '8b8471fe7208f397'],
   keybindings: [10, '5f169ca9f7c6937f'],
   response: [83, 'ab7312084878a8e2'],
-  settings: [153, 'fc12215cca2406df'],
+  settings: [157, '65a5f2ca8d47caa4'],
   shell: [47, '372be7472a286fcb'],
   statusBar: [6, '89d24b7f5affa6cb'],
   sync: [59, 'da3dd1c45b8586c0'],
@@ -266,8 +266,17 @@ const SNAPSHOT: Readonly<Record<string, readonly [count: number, hash: string]>>
  * 警示 / 注册态两词 / 遮蔽两态 / 残留提示共 13 键，删注册 / 注销失败兜底
  * 两死键（失败文案改经统一上报与弹窗本地化透传）（142→153）；
  * 总键 1134→1145。
+ * 更新源解禁云端类型（类型两分 folder/cloud）：settings 域删
+ * updateSourceLocal/updateSourceNetwork/updateSourceCloudPlaceholder 三键、增
+ * updateSourceFolder、updateSourceBaseUrl/updateSourceBaseUrlDesc、
+ * updateSourceMirrorPrefix/updateSourceMirrorPrefixDesc、updateSourceUrlInvalid
+ * 与 checkUpdateAvailableCloud 七键（153→157）；
+ * 总键 1145→1149。
+ * 云端错误码映射补键（errors 域，随 Rust 侧云端拉取码登记）：
+ * UPDATE_SOURCE_NOT_FOUND / UPDATE_SOURCE_RETRIES_EXHAUSTED（76→78）；
+ * 总键 1149→1151。
  */
-const TOTAL_KEYS = 1145
+const TOTAL_KEYS = 1151
 
 /** 与 core.ts lookup 同口径的叶子判定：string 或含 other 键的复数节点 */
 function walkKeys(node: unknown, prefix: string, out: string[]): void {

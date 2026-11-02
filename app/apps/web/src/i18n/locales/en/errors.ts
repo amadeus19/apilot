@@ -20,6 +20,9 @@ export const errors = {
   CLI_PATH_REGISTRY_FAILED: 'Failed to read or write the PATH registry value; try again',
   UPDATE_SOURCE_NOT_CONFIGURED: 'No update source is configured',
   UPDATE_SOURCE_UNREACHABLE: 'Update source path is unreachable; check it and retry',
+  UPDATE_SOURCE_NOT_FOUND:
+    'The cloud manifest or installer is missing; check the repository has a matching release',
+  UPDATE_SOURCE_RETRIES_EXHAUSTED: 'Cloud requests kept failing; check the network and try again',
   UPDATE_MANIFEST_UNREADABLE: 'The update source manifest cannot be read; check the source',
   UPDATE_MANIFEST_INVALID: 'The update source manifest is invalid or lacks a platform entry',
   UPDATE_PACKAGE_UNREADABLE: 'The update package file cannot be read',
