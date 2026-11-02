@@ -46,6 +46,11 @@ pub const UPDATE_SOURCE_CHECK_TIMEOUT_MS: u64 = 5000;
 /// 撑爆内存/磁盘——一切缓冲有界）；现产物约 4MB，256MB 为远超需求的护栏
 pub const MAX_UPDATE_FILE_BYTES: u64 = 256 * 1024 * 1024;
 
+/// 云端更新清单字节数上限：清单为 KB 量级 JSON，1 MiB 已是数百倍余量；
+/// 与资产侧 `MAX_UPDATE_FILE_BYTES` 分开设护栏（清单整体读入内存解析，
+/// 防异常服务端回超大 body 撑爆内存）
+pub const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
+
 /// 云端更新请求连接超时（清单与资产统一：连接层成败通常亚秒级，
 /// 10s 容公网抖动与镜像回源）
 pub const UPDATE_CLOUD_CONNECT_TIMEOUT_MS: u64 = 10_000;

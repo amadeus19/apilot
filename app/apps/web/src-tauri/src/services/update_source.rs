@@ -30,17 +30,19 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 use crate::constants::{
-    MAX_UPDATE_FILE_BYTES, UPDATE_CLOUD_CONNECT_TIMEOUT_MS, UPDATE_CLOUD_MANIFEST_TIMEOUT_MS,
-    UPDATE_CLOUD_READ_TIMEOUT_MS, UPDATE_CLOUD_RETRY_AFTER_CAP_SECS, UPDATE_CLOUD_RETRY_ATTEMPTS,
+    MAX_MANIFEST_BYTES, MAX_UPDATE_FILE_BYTES, UPDATE_CLOUD_CONNECT_TIMEOUT_MS,
+    UPDATE_CLOUD_MANIFEST_TIMEOUT_MS, UPDATE_CLOUD_READ_TIMEOUT_MS,
+    UPDATE_CLOUD_RETRY_AFTER_CAP_SECS, UPDATE_CLOUD_RETRY_ATTEMPTS,
     UPDATE_CLOUD_RETRY_BASE_DELAY_MS, UPDATE_SOURCE_CHECK_TIMEOUT_MS,
 };
 use crate::error::AppError;
 
 /// 更新签名公钥（minisign 公钥文件两行格式，`PublicKey::decode` 按此解析）。
-/// 来源：`~/.tauri/apilot.key.pub` 的 base64 内容解码后的第二行（tauri 的
-/// `.pub` 是 minisign.pub 全文再 base64 一层，`plugins.updater.pubkey` 用那层，
-/// 本常量用解码后的真实公钥行）。**正式发版换密钥时同步更新此常量**。
-const UPDATE_PUBKEY: &str = "untrusted comment: minisign public key: 5AC3AF3D64CAD149\nRWRJ0cpkPa/DWi47iDT/8JiWhKsq4YZvPEmmb73JZNyprJYkU7dyiPX9";
+/// 来源：`~/.tauri/apilot-release.key.pub`（fingerprint 72717A9A59890552）的
+/// base64 内容解码后的原文两行（tauri 的 `.pub` 是 minisign.pub 全文再 base64
+/// 一层，`plugins.updater.pubkey` 用那层，本常量用解码后的原文）。
+/// **正式发版换密钥时同步更新此常量**。
+const UPDATE_PUBKEY: &str = "untrusted comment: minisign public key: 72717A9A59890552\nRWRSBYlZmnpxcqmBfp10g0pf5RgiiHr7zXYCWCH6UjNJwvrK9PK8A8c7";
 
 /// 临时目录就绪包文件名前缀（download 落盘与 list 扫描共用同一常量防漂移）：
 /// 完整形态 `APilot-update-<x.y.z>.exe`，落盘中态 `APilot-update-<x.y.z>.exe.part`
@@ -827,10 +829,38 @@ async fn fetch_cloud_manifest(
             CloudRequestError::Unreachable(r) => CloudManifestError::Unreachable(r),
             CloudRequestError::RetriesExhausted(r) => CloudManifestError::RetriesExhausted(r),
         })?;
-    let raw = resp
-        .text()
-        .await
-        .map_err(|err| CloudManifestError::Unreachable(format!("manifest body read failed: {err}")))?;
+    // 清单体读入内存有界（与资产侧 collect_asset_bytes 同款双护栏）：
+    // Content-Length 预检超限即拒；逐 chunk 累计兜底流式响应。正常清单
+    // 为 KB 量级 JSON，超限属服务端异常（劫持/故障），拒绝解析。
+    if let Some(len) = resp.content_length() {
+        if len > MAX_MANIFEST_BYTES {
+            return Err(CloudManifestError::Invalid(format!(
+                "manifest too large: {len} bytes exceeds limit {MAX_MANIFEST_BYTES}"
+            )));
+        }
+    }
+    let mut raw_bytes: Vec<u8> = Vec::new();
+    let mut resp = resp;
+    loop {
+        match resp.chunk().await {
+            Ok(Some(chunk)) => {
+                if raw_bytes.len() as u64 + chunk.len() as u64 > MAX_MANIFEST_BYTES {
+                    return Err(CloudManifestError::Invalid(format!(
+                        "manifest too large: exceeds limit {MAX_MANIFEST_BYTES}"
+                    )));
+                }
+                raw_bytes.extend_from_slice(&chunk);
+            }
+            Ok(None) => break,
+            Err(err) => {
+                return Err(CloudManifestError::Unreachable(format!(
+                    "manifest body read failed: {err}"
+                )));
+            }
+        }
+    }
+    let raw = String::from_utf8(raw_bytes)
+        .map_err(|_| CloudManifestError::Invalid("manifest is not valid UTF-8".to_owned()))?;
     match parse_manifest(&raw) {
         Ok(manifest) => Ok(manifest),
         // parse_manifest 只产生 Invalid；Unreadable 分支防御性兜底
@@ -2319,6 +2349,26 @@ mod tests {
             .unwrap();
         assert_eq!(r.status, "newer_available");
         assert_eq!(r.tag, None, "旧清单无 tag，结果按 None 反映兼容形态");
+    }
+
+    #[tokio::test]
+    async fn cloud_manifest_oversized_content_length_rejected() {
+        // Content-Length 预检：声明超限的清单即拒（缓冲有界），不读满 body
+        let body = vec![b'x'; 2 * 1024 * 1024];
+        let mock = spawn_cloud_mock(vec![(
+            "/releases/latest/download/manifest.json",
+            MockBehavior::Sequence(vec![seq_response(200, &body)]),
+        )])
+        .await;
+        let r = check_for_update(Some(&cloud_config(&mock.base, "")))
+            .await
+            .unwrap();
+        assert_eq!(r.status, "invalid_manifest");
+        assert!(
+            r.notes.as_deref().unwrap_or_default().contains("too large"),
+            "超限细节应携带：{:?}",
+            r.notes
+        );
     }
 
     #[tokio::test]
