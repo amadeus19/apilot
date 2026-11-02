@@ -1,0 +1,221 @@
+# APilot 发版流水线：push 标签 v* 触发 → Windows 双架构构建（NSIS + MSI + updater 签名产物）
+# → 汇集生成自研 manifest.json → 创建 Draft GitHub Release 并挂载全部资产。
+# 人工核对 draft 资产清单后转正式发布，releases/latest/download/manifest.json 稳定直链才生效
+# （draft 阶段资产直链不可用，云端更新源验收须安排在转正式之后）。
+#
+# 签名密钥（仓库 Secrets，本文件仅引用名称，不落任何密钥明文）：
+#   TAURI_SIGNING_PRIVATE_KEY            —— minisign 私钥全文（tauri signer generate 产物）
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD   —— 私钥口令（无口令密钥可置空值）
+#
+# 产物命名（tauri-bundler 实际模板，v2.12.0 源码）：
+#   NSIS  APilot_<版本>_{x64|arm64}-setup.exe（+ 同名 .sig，进 manifest，更新通道）
+#   MSI   APilot_<版本>_{x64|arm64}_en-US.msi（仅手动下载通道，不进 manifest）
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要发布的 tag（如 v0.9.0）'
+        required: true
+        type: string
+
+# 创建 Release 与上传资产仅需要 contents scope（官方 workflow syntax 明示）
+permissions:
+  contents: write
+
+# 按 ref 分组天然按 tag 去重；发版流水线不做半途取消，避免 Release 资产半套状态
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: 构建 ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        # ARM64 选型：windows-11-arm 公共托管 runner（2025-04 起对公共仓库免费，现已 GA，
+        # 镜像由 GitHub 官方维护）。原生 aarch64 工具链编译，产物路径与 x64 相同
+        # （target/release/bundle），收集逻辑两架构统一；NSIS/WiX 工具链由 tauri bundler
+        # 自动下载 x64 版并经 Windows 11 x64 仿真运行（官方文档确认该形态可用）。
+        # 备选降级案：windows-latest 上给构建命令追加 --target aarch64-pc-windows-msvc
+        # 交叉编译——产物路径变为 target/<triple>/release/bundle，收集步骤、rust-cache
+        # 映射需同步调整，且多一次 host/target 分叉；仅在 windows-11-arm 队列不可用时启用。
+        include:
+          - os: windows-latest
+            arch: x64
+            rust-target: x86_64-pc-windows-msvc
+          - os: windows-11-arm
+            arch: arm64
+            rust-target: aarch64-pc-windows-msvc
+
+    steps:
+      - name: 检出源码（tag 或手动指定的 ref）
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      # 仓库根无 package.json 可供自动取版，version 显式声明并与 app/package.json 的
+      # packageManager 字段（pnpm@10.13.1）保持同步；必须先于 setup-node
+      # （cache: pnpm 依赖 pnpm 可执行文件已就位）
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.13.1
+
+      - name: 安装 Node.js（pnpm store 缓存挂锁文件哈希）
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+
+      - name: 安装 Rust 工具链（stable，含矩阵目标架构）
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-target }}
+
+      - name: 缓存 Rust 构建产物
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/apps/web/src-tauri -> app/apps/web/src-tauri/target
+
+      - name: 安装前端依赖（CI 自动 frozen-lockfile，显式声明防止漂移）
+        shell: bash
+        working-directory: app
+        run: pnpm install --frozen-lockfile
+
+      # 对齐 app/scripts/release-on-tag.mjs 的既有守卫口径：
+      # 标签 ↔ tauri.conf.json ↔ Cargo.toml 三方一致，任一不一致即失败
+      - name: 版本守卫（标签 ↔ tauri.conf.json ↔ Cargo.toml）
+        shell: bash
+        working-directory: app
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::标签须形如 vX.Y.Z，收到：$TAG"
+            exit 1
+          fi
+          version="${TAG#v}"
+          conf_version=$(node -p "require('./apps/web/src-tauri/tauri.conf.json').version")
+          cargo_version=$(grep -m1 -E '^version[[:space:]]*=' apps/web/src-tauri/Cargo.toml \
+            | sed -E 's/^version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/')
+          if [ "$conf_version" != "$version" ]; then
+            echo "::error::版本不一致：标签 $TAG ↔ tauri.conf.json $conf_version"
+            exit 1
+          fi
+          if [ "$cargo_version" != "$version" ]; then
+            echo "::error::版本不一致：标签 $TAG ↔ Cargo.toml $cargo_version"
+            exit 1
+          fi
+          echo "版本一致：$TAG = tauri.conf.json = Cargo.toml = $version"
+
+      # 签名 env 与 --config 覆盖正交组合（前者管密钥、后者管配置合并）；
+      # 未注入私钥时 createUpdaterArtifacts 构建在签名阶段直接失败，构成硬前置。
+      # --config 相对路径以执行目录 app/apps/web 解析，与本地发包流程同一份覆盖文件
+      - name: 构建（NSIS + MSI + updater 签名产物）
+        shell: bash
+        working-directory: app/apps/web
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm tauri build --config ../../scripts/updater-build-override.json
+
+      # NSIS 更新包 + .sig 是更新通道核心资产，缺失即失败（glob 不展开时 cp 报错退出）；
+      # MSI 仅手动下载通道，宽松收集——ARM64 MSI 若遇 bundler 坑，按定案口径降级为
+      # 仅 NSIS，不阻塞流水线。架构段宽匹配：bundler 对 AArch64 实际输出 "arm64"。
+      - name: 收集安装包
+        shell: bash
+        working-directory: app
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          bundle="apps/web/src-tauri/target/release/bundle"
+          cp "$bundle"/nsis/APilot_*-setup.exe "$bundle"/nsis/APilot_*-setup.exe.sig dist/
+          if ! cp "$bundle"/msi/APilot_*_en-US.msi dist/ 2>/dev/null; then
+            echo "::warning::本架构 MSI 未产出（仅影响手动下载通道，NSIS 更新通道不受影响）"
+          fi
+          ls -l dist/
+
+      - name: 上传构建产物（按架构命名）
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.arch }}
+          path: app/dist/*
+          if-no-files-found: error
+          retention-days: 3
+
+  release:
+    name: 汇集发布
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: build
+    steps:
+      - name: 检出源码（manifest 生成脚本与版本事实源）
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: 下载双架构构建产物
+        uses: actions/download-artifact@v4
+        with:
+          path: installers
+          merge-multiple: true
+
+      # 标签附注作为 Release 正文与 manifest notes；轻量标签（无附注）回退默认文案，
+      # 与 app/scripts/release-on-tag.mjs 既有口径一致
+      - name: 读取标签附注
+        shell: bash
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          git fetch --force origin "refs/tags/${TAG}:refs/tags/${TAG}"
+          body=$(git tag -l --format='%(contents)' "$TAG")
+          if [ -z "$body" ]; then
+            body="${TAG} 版本更新"
+          fi
+          {
+            echo "RELEASE_BODY<<RELEASE_BODY_EOF"
+            printf '%s\n' "$body"
+            echo "RELEASE_BODY_EOF"
+          } >> "$GITHUB_ENV"
+
+      # 清单生成与自校验统一走 publish-update.mjs（与本地发包流程单一事实源）；
+      # 双架构 setup.exe/.sig 任一缺失或命名不符即在此 fail
+      - name: 生成 manifest.json（GitHub Release 形态）
+        shell: bash
+        working-directory: app
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(find ../installers -type f | sort)
+          node scripts/publish-update.mjs --github --tag "$TAG" \
+            --notes "$RELEASE_BODY" --out dist-update/manifest.json "${files[@]}"
+
+      # 首跑草稿（draft）：人工核对资产后转正式，转正式后 releases/latest 稳定直链才生效；
+      # tag 重跑时按 tag_name 定位已有 Release，overwrite_files 覆盖同名资产
+      - name: 创建 Draft Release 并上传资产
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: ${{ inputs.tag || github.ref_name }}
+          body: ${{ env.RELEASE_BODY }}
+          draft: true
+          prerelease: false
+          overwrite_files: true
+          files: |
+            installers/*-setup.exe
+            installers/*-setup.exe.sig
+            installers/*.msi
+            app/dist-update/manifest.json
