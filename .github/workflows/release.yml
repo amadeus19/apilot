@@ -85,7 +85,9 @@ jobs:
       - name: 缓存 Rust 构建产物
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: app/apps/web/src-tauri -> app/apps/web/src-tauri/target
+          # app 级虚拟 cargo workspace（ADR-0008）：target 目录在 app/target，
+          # 所有成员 crate（含 src-tauri）共享同一 target，不落 src-tauri 自身
+          workspaces: app -> app/target
 
       - name: 安装前端依赖（CI 自动 frozen-lockfile，显式声明防止漂移）
         shell: bash
@@ -139,7 +141,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          bundle="apps/web/src-tauri/target/release/bundle"
+          # bundle 产物随 cargo workspace 落在 app/target（本步骤 cwd=app），
+          # 不在 src-tauri 子目录
+          bundle="target/release/bundle"
           cp "$bundle"/nsis/APilot_*-setup.exe "$bundle"/nsis/APilot_*-setup.exe.sig dist/
           if ! cp "$bundle"/msi/APilot_*_en-US.msi dist/ 2>/dev/null; then
             echo "::warning::本架构 MSI 未产出（仅影响手动下载通道，NSIS 更新通道不受影响）"
