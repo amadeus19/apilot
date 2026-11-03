@@ -49,7 +49,8 @@ const UPDATE_PUBKEY: &str = "untrusted comment: minisign public key: 72717A9A598
 const STAGED_UPDATE_PREFIX: &str = "APilot-update-";
 
 /// cloud 源默认仓库地址（settings 契约的默认预填值；UA 标识同源引用）。
-/// 用户可改可删——指向任意 GitHub 仓库的 Releases。
+/// 用户可改可删——指向任意 GitHub 仓库的 Releases。清单上传目标在
+/// `publish-update.mjs` 的 GITHUB_REPO——同一仓库地址的两处事实，换仓库须两处齐改。
 const DEFAULT_CLOUD_BASE_URL: &str = "https://github.com/amadeus19/apilot";
 
 /// GitHub Release 直链路径段：清单挂最新正式 Release 的固定名资产位，
@@ -254,14 +255,19 @@ fn manifest_download_error(err: ManifestError) -> AppError {
     }
 }
 
-/// 未到达状态（unreachable + 英文细节 notes）：源侧失败的统一检查出口
-fn unreachable_status(note: impl Into<String>) -> CheckUpdatesResult {
+/// 失败检查出口共用形状：状态 + 英文细节 notes，latest_version / tag 恒 None
+fn note_status_result(status: &'static str, note: impl Into<String>) -> CheckUpdatesResult {
     CheckUpdatesResult {
-        status: "unreachable",
+        status,
         latest_version: None,
         notes: Some(note.into()),
         tag: None,
     }
+}
+
+/// 未到达状态（unreachable + 英文细节 notes）：源侧失败的统一检查出口
+fn unreachable_status(note: impl Into<String>) -> CheckUpdatesResult {
+    note_status_result("unreachable", note)
 }
 
 /// 清单 → 检查结果（双源共用尾段）：平台条目校验 + 版本方向三分。
@@ -298,14 +304,10 @@ fn manifest_check_result(manifest: Manifest) -> Result<CheckUpdatesResult, Manif
 
 /// ManifestError → 检查结果（unreachable / invalid_manifest 状态 + 细节 notes）
 fn manifest_error_status(err: &ManifestError) -> CheckUpdatesResult {
-    CheckUpdatesResult {
-        status: manifest_status(err),
-        latest_version: None,
-        notes: Some(match err {
-            ManifestError::Unreadable(reason) | ManifestError::Invalid(reason) => reason.clone(),
-        }),
-        tag: None,
-    }
+    let reason = match err {
+        ManifestError::Unreadable(reason) | ManifestError::Invalid(reason) => reason.clone(),
+    };
+    note_status_result(manifest_status(err), reason)
 }
 
 /// 更新检查主流程：`updateSource` 设置（`kind` 判别，兼容旧 `type` 数据）→
@@ -369,12 +371,10 @@ async fn check_cloud_source(
     let manifest = match fetch_cloud_manifest(base_url, mirror_prefix, policy).await {
         Ok(manifest) => manifest,
         Err(err) => {
-            return Ok(CheckUpdatesResult {
-                status: cloud_manifest_status(&err),
-                latest_version: None,
-                notes: Some(err.reason().to_owned()),
-                tag: None,
-            });
+            return Ok(note_status_result(
+                cloud_manifest_status(&err),
+                err.reason().to_owned(),
+            ));
         }
     };
     Ok(manifest_check_result(manifest).unwrap_or_else(|err| manifest_error_status(&err)))
@@ -620,22 +620,27 @@ enum CloudRequestError {
     RetriesExhausted(String),
 }
 
+impl CloudRequestError {
+    /// 失败细节（检查阶段随 notes 展示、下载阶段进 AppError message）
+    fn reason(&self) -> &str {
+        match self {
+            Self::NotFound(r) | Self::Unreachable(r) | Self::RetriesExhausted(r) => r,
+        }
+    }
+}
+
 /// cloud 清单获取失败 = 请求失败分类 + 清单校验失败（Invalid）的合并
 #[derive(Debug)]
 enum CloudManifestError {
-    NotFound(String),
-    Unreachable(String),
-    RetriesExhausted(String),
+    Request(CloudRequestError),
     Invalid(String),
 }
 
 impl CloudManifestError {
     fn reason(&self) -> &str {
         match self {
-            Self::NotFound(r)
-            | Self::Unreachable(r)
-            | Self::RetriesExhausted(r)
-            | Self::Invalid(r) => r,
+            Self::Request(err) => err.reason(),
+            Self::Invalid(r) => r,
         }
     }
 }
@@ -645,7 +650,7 @@ impl CloudManifestError {
 fn cloud_manifest_status(err: &CloudManifestError) -> &'static str {
     match err {
         CloudManifestError::Invalid(_) => "invalid_manifest",
-        _ => "unreachable",
+        CloudManifestError::Request(_) => "unreachable",
     }
 }
 
@@ -664,20 +669,12 @@ fn cloud_request_error(err: CloudRequestError) -> AppError {
     }
 }
 
-/// 下载阶段：cloud 清单获取失败 → 阶段错误码
+/// 下载阶段：cloud 清单获取失败 → 阶段错误码（请求分类复用 [`cloud_request_error`]）
 fn cloud_manifest_download_error(err: CloudManifestError) -> AppError {
     match err {
+        CloudManifestError::Request(err) => cloud_request_error(err),
         CloudManifestError::Invalid(reason) => {
             AppError::new(crate::error::codes::UPDATE_MANIFEST_INVALID, reason)
-        }
-        CloudManifestError::NotFound(reason) => {
-            AppError::new(crate::error::codes::UPDATE_SOURCE_NOT_FOUND, reason)
-        }
-        CloudManifestError::Unreachable(reason) => {
-            AppError::new(crate::error::codes::UPDATE_SOURCE_UNREACHABLE, reason)
-        }
-        CloudManifestError::RetriesExhausted(reason) => {
-            AppError::new(crate::error::codes::UPDATE_SOURCE_RETRIES_EXHAUSTED, reason)
         }
     }
 }
@@ -820,15 +817,13 @@ async fn fetch_cloud_manifest(
 ) -> Result<Manifest, CloudManifestError> {
     let url = cloud_manifest_url(base_url, mirror_prefix);
     let client = manifest_client(policy).map_err(|err| {
-        CloudManifestError::Unreachable(format!("http client build failed: {err}"))
+        CloudManifestError::Request(CloudRequestError::Unreachable(format!(
+            "http client build failed: {err}"
+        )))
     })?;
     let resp = get_with_retry(&client, &url, policy)
         .await
-        .map_err(|err| match err {
-            CloudRequestError::NotFound(r) => CloudManifestError::NotFound(r),
-            CloudRequestError::Unreachable(r) => CloudManifestError::Unreachable(r),
-            CloudRequestError::RetriesExhausted(r) => CloudManifestError::RetriesExhausted(r),
-        })?;
+        .map_err(CloudManifestError::Request)?;
     // 清单体读入内存有界（与资产侧 collect_asset_bytes 同款双护栏）：
     // Content-Length 预检超限即拒；逐 chunk 累计兜底流式响应。正常清单
     // 为 KB 量级 JSON，超限属服务端异常（劫持/故障），拒绝解析。
@@ -853,8 +848,8 @@ async fn fetch_cloud_manifest(
             }
             Ok(None) => break,
             Err(err) => {
-                return Err(CloudManifestError::Unreachable(format!(
-                    "manifest body read failed: {err}"
+                return Err(CloudManifestError::Request(CloudRequestError::Unreachable(
+                    format!("manifest body read failed: {err}"),
                 )));
             }
         }
@@ -865,7 +860,9 @@ async fn fetch_cloud_manifest(
         Ok(manifest) => Ok(manifest),
         // parse_manifest 只产生 Invalid；Unreadable 分支防御性兜底
         Err(ManifestError::Invalid(reason)) => Err(CloudManifestError::Invalid(reason)),
-        Err(ManifestError::Unreadable(reason)) => Err(CloudManifestError::Unreachable(reason)),
+        Err(ManifestError::Unreadable(reason)) => {
+            Err(CloudManifestError::Request(CloudRequestError::Unreachable(reason)))
+        }
     }
 }
 
@@ -1958,9 +1955,8 @@ mod tests {
 
     // —— 云端源（mock HTTP 服务器，不依赖公网）——
 
-    use std::collections::HashMap as _HashMap;
     use std::sync::{Arc, Mutex};
-    use tokio::io::{AsyncReadExt as _AsyncReadExt, AsyncWriteExt as _AsyncWriteExt};
+    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 
     /// 单次请求记录：path 与 UA（镜像前缀拼接形态与 UA 语义的断言材料）
     #[derive(Debug, Clone)]
@@ -2036,7 +2032,7 @@ mod tests {
     async fn spawn_cloud_mock(routes: Vec<(&str, MockBehavior)>) -> CloudMock {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
-        let route_map: _HashMap<String, MockBehavior> = routes
+        let route_map: HashMap<String, MockBehavior> = routes
             .into_iter()
             .map(|(p, b)| (p.to_owned(), b))
             .collect();
@@ -2045,7 +2041,7 @@ mod tests {
         // Sequence 游标按路由路径计请求序（多路由互不干扰）
         tokio::spawn(async move {
             let routes = Arc::new(route_map);
-            let cursors = Arc::new(Mutex::new(_HashMap::<String, usize>::new()));
+            let cursors = Arc::new(Mutex::new(HashMap::<String, usize>::new()));
             loop {
                 let Ok((mut socket, _)) = listener.accept().await else {
                     return;
