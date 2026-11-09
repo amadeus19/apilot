@@ -5,6 +5,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import '@workspace/ui/globals.css'
 import { App } from './App.tsx'
 import { BootErrorScreen } from './components/common/BootErrorScreen.tsx'
+import { CloseConfirmDialog } from './features/settings'
 import { UpdateReadyDialog } from './features/update'
 import { ThemeProvider, UiTextBridge, DevtoolsF12, DevtoolsHotkeyGuard } from './app/providers.tsx'
 import { setDevtoolsNative } from './services/devtools-flag.ts'
@@ -73,6 +74,8 @@ async function boot(): Promise<void> {
           <DevtoolsHotkeyGuard />
           <DevtoolsF12 />
           <App />
+          {/* 关闭确认对话框：exit-flush 收到 ask 询问事件后经 store 请求，根挂载宿主 */}
+          <CloseConfirmDialog />
           {/* 更新就绪确认对话框：服务层经 store 请求，根挂载宿主 */}
           <UpdateReadyDialog />
         </UiTextBridge>

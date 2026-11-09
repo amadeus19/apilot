@@ -1,12 +1,14 @@
 /**
- * 设置面板：7 组信息架构的组名、设置行与动作文案。
+ * 设置面板：8 组信息架构的组名、设置行与动作文案。
  */
 export const settings = {
   title: '设置',
   description: '应用偏好与功能配置',
   searchPlaceholder: '搜索设置…',
 
-  // 7 组导航（组名 + 描述）
+  // 8 组导航（组名 + 描述）
+  navGeneral: '通用',
+  navGeneralDesc: '窗口关闭等应用行为',
   navAppearance: '外观',
   navAppearanceDesc: '主题与强调色',
   navLanguage: '语言',
@@ -50,6 +52,20 @@ export const settings = {
 
   // 搜索无命中（导航空态与内容回落共用）
   searchNoResults: '没有匹配的设置项',
+
+  // 通用组（关闭按钮行为）
+  closeBehaviorLabel: '关闭按钮行为',
+  closeBehaviorDesc: '点击窗口关闭按钮时的动作',
+  closeBehaviorAsk: '每次询问',
+  closeBehaviorTray: '最小化到托盘',
+  closeBehaviorExit: '退出应用',
+
+  // 关闭确认弹窗（ask 态关闭请求时呈现；两动作外 Esc / 点外＝取消）
+  closeConfirmTitle: '要关闭 APilot 吗？',
+  closeConfirmDesc: '选择点击关闭按钮后的动作；之后可在设置的「通用 → 关闭按钮行为」中修改。',
+  closeConfirmTray: '最小化到托盘',
+  closeConfirmExit: '退出应用',
+  closeConfirmRemember: '记住我的选择',
 
   // 外观组
   themeLabel: '主题',

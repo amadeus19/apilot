@@ -67,7 +67,17 @@ function openapiDoc(version: 1 | 2 | 3): Record<string, unknown> {
     summary: '创建用户',
     requestBody: {
       required: true,
-      content: { 'application/json': { schema: { type: 'object' } } },
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              tagList: { type: 'array', items: { type: 'integer' } },
+            },
+          },
+        },
+      },
     },
     responses: okJson,
   }
@@ -249,6 +259,23 @@ test.describe('Phase 5 同步 E2E 全链路', () => {
       await expect(row).toBeVisible()
       await expect(row.getByText('新增', { exact: true })).toBeVisible()
     }
+
+    // 数组铺底：首次同步铺出 POST /users 请求体骨架，数组字段铺首元素骨架 [0]
+    const workspaceId = ((await invokeIpc(page, 'workspace.list')) as { currentId: string })
+      .currentId
+    const tree = (await invokeIpc(page, 'tree.get', { workspaceId })) as {
+      services: Array<{ id: string; name: string }>
+    }
+    const serviceId = tree.services.find((s) => s.name === FIXTURE_TITLE)!.id
+    const postDto = (await invokeIpc(page, 'user_data.get', {
+      serviceId,
+      key: 'POST /users',
+    })) as { body: string | null } | null
+    expect(postDto?.body).not.toBeNull()
+    const envelope = JSON.parse(postDto!.body!) as { kind: string; text: string }
+    expect(envelope.kind).toBe('json')
+    const seededBody = JSON.parse(envelope.text) as Record<string, unknown>
+    expect(seededBody.tagList).toEqual([0])
   })
 
   test('场景三：改 fixture 二次 diff——增删改混合应用后树形收敛', async ({ appPage }) => {

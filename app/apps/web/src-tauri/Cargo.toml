@@ -29,13 +29,17 @@ tauri-build = { version = "2.7.0", features = [] }
 # "devtools" feature 仅用于 release 构建下 WebviewWindowBuilder::devtools()
 # 可用（F12 加速键只认创建时的值，创建值由 setup 按 devMode 初值给出，
 # 见 services/devtools.rs）——debug 构建该 API 本就可用
-tauri = { version = "2.12.0", features = ["devtools"] }
+# "tray-icon"＝系统托盘（TrayIconBuilder / 菜单 / 单击事件，见 src/tray.rs）
+tauri = { version = "2.12.0", features = ["devtools", "tray-icon"] }
 tauri-plugin-os = "2"
 tauri-plugin-opener = "2"
 # 12 号票：设置面板「更改目录」的系统文件夹选择器
 tauri-plugin-dialog = "2"
 # 备份恢复暂存后的「立即重启」（官方 process 插件，仅 relaunch 能力被使用）
 tauri-plugin-process = "2.4.0"
+# 防双开（官方插件）：二次启动只唤起已有主窗口——双开共用同一 SQLite 与
+# 日志目录有实害；注册顺序必须第一（官方要求在 setup 前生效，见 lib.rs run）
+tauri-plugin-single-instance = "2"
 # CLI 命令行解析：derive 模式，v4
 clap = { version = "4", features = ["derive"] }
 # HTTP 客户端（Phase 4 引擎）：stream＝响应流式分级读取、socks＝代理 socks5、

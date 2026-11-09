@@ -14,6 +14,10 @@ import { defineConfig, devices } from '@playwright/test'
 export default defineConfig({
   testDir: './tests',
   testMatch: '**/*.spec.ts',
+  /* 每测 120s：首个测试承担实例自起全链（tauri dev 编译 + vite + CDP 就绪，
+     cdp.ts 的等待预算设计即「容忍长等待」，默认 30s 会被启动成本吃穿）；
+     测试内部断言自带更短的 expect 等待，上限放宽不掩盖回归 */
+  timeout: 120_000,
   /* CDP 单实例：全部测试串行共享一个 Tauri WebView2 target */
   fullyParallel: false,
   workers: 1,

@@ -129,6 +129,55 @@ describe('历史详情：只读全量留痕', () => {
     expect(screen.getByText('{"query":"x"}')).toBeInTheDocument()
   })
 
+  it('未截断压缩 JSON：请求体 / 响应体格式化缩进展示（区域可选、复制与显示同源）', async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'run.get') {
+        return Promise.resolve(
+          makeDetail({
+            request: {
+              method: 'GET',
+              url: 'http://localhost/orders?page=1&api_key=secret',
+              headers: [
+                ['accept', '*/*'],
+                ['authorization', 'Bearer secret-token'],
+                ['x-custom-key', 'my-api-key'],
+              ],
+              body: { excerpt: '{"query":"x","page":1}', truncated: false, totalSize: 22 },
+              redactions: {
+                headerNames: ['x-custom-key'],
+                queryKeys: ['api_key'],
+                secretValues: [],
+              },
+            },
+            response: {
+              status: 200,
+              headers: [['content-type', 'application/json']],
+              contentType: 'application/json',
+              body: { excerpt: '{"ok":true,"items":[1,2]}', truncated: false, totalSize: 25 },
+            },
+          }),
+        )
+      }
+      return Promise.resolve(undefined)
+    })
+    render(<HistoryDetailPane runId="run-1" />, { wrapper: createQueryWrapper() })
+
+    // 请求体（头无 content-type，按 parse 兜底）与响应体（application/json）
+    // 均以共享 JsonView 呈现：区域放行划选（select-text）
+    const views = await screen.findAllByTestId('json-view')
+    expect(views).toHaveLength(2)
+    expect(views[0]).toHaveClass('select-text')
+    expect(views[1]).toHaveClass('select-text')
+    // 格式化展示：两空格缩进（着色 token 流拼接无损，textContent 即格式化文本）
+    expect(views[0]?.textContent).toBe('{\n  "query": "x",\n  "page": 1\n}')
+    expect(views[1]?.textContent).toBe('{\n  "ok": true,\n  "items": [\n    1,\n    2\n  ]\n}')
+    // 复制口径与显示同源：写剪贴板的是格式化文本
+    fireEvent.click(within(views[0]!).getByRole('button', { name: '复制' }))
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith('{\n  "query": "x",\n  "page": 1\n}')
+    })
+  })
+
   it('响应快照重名头（Set-Cookie 多值）逐行渲染不丢行；敏感值默认掩码、放行后还原', async () => {
     invokeMock.mockImplementation((cmd: string) => {
       if (cmd === 'run.get') {

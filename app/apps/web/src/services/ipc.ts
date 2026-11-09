@@ -218,8 +218,9 @@ export function downloadUpdate(): Promise<StagedUpdateInfo> {
   return invoke<StagedUpdateInfo>('download_update')
 }
 
-/** 启动静默安装器（两段式之二）：以版本号重构暂存包并 spawn /S，
- * 随后应用关窗走统一 shutdown，安装器覆盖安装 */
+/** 启动静默安装器（两段式之二）：以版本号重构暂存包并校验，暂存为待安装请求并
+ * arm 退出闸门；调用方收尾后 ack（app.ready_to_exit）放行完整退出序列，序列末尾
+ * spawn 安装器覆盖安装 */
 export function installUpdate(version: string): Promise<void> {
   return invoke<void>('install_update', { version })
 }
@@ -242,4 +243,16 @@ export function listStagedUpdates(): Promise<StagedUpdates> {
 /** 删除指定就绪包（完成提示后调用；以版本号重构路径，命名空间外无法触达） */
 export function discardStagedUpdate(version: string): Promise<void> {
   return invoke<void>('discard_staged_update', { version })
+}
+
+// —— 关闭行为（关闭确认弹窗消费；决策在 Rust 侧，前端只报告用户选择）——
+
+/** 询问弹窗选「最小化到托盘」：Rust 侧隐藏窗口并常驻托盘（不走退出闸门） */
+export function hideToTray(): Promise<void> {
+  return invoke<void>('app.hide_to_tray')
+}
+
+/** 询问弹窗选「退出应用」：前端收尾 flush 完成后调用，Rust 放行完整退出序列 */
+export function confirmExit(): Promise<void> {
+  return invoke<void>('app.confirm_exit')
 }

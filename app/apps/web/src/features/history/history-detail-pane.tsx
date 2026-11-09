@@ -16,6 +16,8 @@ import { useI18n, formatBytes, formatDuration } from '@/i18n'
 import { SentRequestPane } from '@/features/http/sent-request-pane'
 import { isSensitiveHeader, statusCodeClass } from '@/features/http/constants'
 import type { RequestSnapshotDto, ResponseSnapshotDto } from '@/features/http/http-api'
+import { contentTypeFromHeaders, formatSnapshotBodyJson } from '@/features/http/json-format'
+import { JsonView } from '@/features/http/json-view'
 import { useIpcQuery } from '@/services/ipc-query'
 import { useWorkspacesQuery } from '@/features/workspaces/api'
 import { draftSeedFromSnapshot } from '@/features/workbench/history-draft'
@@ -146,6 +148,18 @@ export function HistoryDetailPane({ runId }: { runId: string }) {
   const createdTs = Date.parse(detail.createdAt)
   // 请求体快照局部收窄：属性窄化不保留进复制口径闭包，先取定值
   const requestBody = request?.body ?? null
+  // 请求体 / 响应体展示口径（显示与复制同源）：未截断且判定 JSON 才格式化
+  // （content-type 优先、缺失按 parse 兜底），否则摘录原样——判定见
+  // formatSnapshotBodyJson；格式化块经共享 JsonView 呈现（划选＋复制内建）
+  const requestContentType = request !== null ? contentTypeFromHeaders(request.headers) : null
+  const requestBodyFormatted =
+    requestBody !== null
+      ? formatSnapshotBodyJson(requestBody.excerpt, requestBody.truncated, requestContentType)
+      : null
+  const responseFormatted =
+    response !== null
+      ? formatSnapshotBodyJson(response.body.excerpt, response.body.truncated, response.contentType)
+      : null
 
   // 恢复动作（快照缺失时禁用）：构造内存草稿副本并开新草稿 Tab——历史
   // 记录与用户数据零改动；落库只经草稿 Tab 的「另存为新接口」转正
@@ -294,11 +308,17 @@ export function HistoryDetailPane({ runId }: { runId: string }) {
                       {formatBytes(requestBody.totalSize)}
                     </span>
                   </div>
-                  <CopySurface getText={() => requestBody.excerpt}>
-                    <pre className="max-h-40 overflow-auto rounded-sm bg-muted/50 p-2 font-mono text-xs break-words whitespace-pre-wrap">
-                      {requestBody.excerpt}
-                    </pre>
-                  </CopySurface>
+                  {requestBodyFormatted !== null ? (
+                    // 格式化块：高度上限较摘录态调大（缩进后行数变多），
+                    // 超出块内滚动，不撑爆页面滚动布局
+                    <JsonView value={requestBodyFormatted} className="max-h-64" />
+                  ) : (
+                    <CopySurface getText={() => requestBody.excerpt}>
+                      <pre className="max-h-40 overflow-auto rounded-sm bg-muted/50 p-2 font-mono text-xs break-words whitespace-pre-wrap">
+                        {requestBody.excerpt}
+                      </pre>
+                    </CopySurface>
+                  )}
                 </div>
               )}
             </div>
@@ -382,11 +402,16 @@ export function HistoryDetailPane({ runId }: { runId: string }) {
                   )
                 })}
               </dl>
-              <CopySurface getText={() => response.body.excerpt}>
-                <pre className="max-h-80 overflow-auto rounded-sm bg-muted/50 p-2 font-mono text-xs break-words whitespace-pre-wrap">
-                  {response.body.excerpt}
-                </pre>
-              </CopySurface>
+              {responseFormatted !== null ? (
+                // 格式化块：同请求体口径——高度上限调大、块内滚动
+                <JsonView value={responseFormatted} className="max-h-96" />
+              ) : (
+                <CopySurface getText={() => response.body.excerpt}>
+                  <pre className="max-h-80 overflow-auto rounded-sm bg-muted/50 p-2 font-mono text-xs break-words whitespace-pre-wrap">
+                    {response.body.excerpt}
+                  </pre>
+                </CopySurface>
+              )}
             </div>
           ) : (
             <div className="rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground">

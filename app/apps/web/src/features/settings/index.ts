@@ -3,3 +3,4 @@
  * 域内部件（navigation、各 Section）互引走相对路径，不进公开面。
  */
 export { SettingsDialog } from './SettingsDialog'
+export { CloseConfirmDialog } from './close-confirm-dialog'

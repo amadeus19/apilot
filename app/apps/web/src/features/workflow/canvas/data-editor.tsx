@@ -276,7 +276,9 @@ export function ExtractEditor({
             onChange={(event) => setBulkText(event.target.value)}
             spellCheck={false}
             aria-label={t('workflows.extractBulkEdit')}
-            className="min-h-32 resize-none font-mono text-xs"
+            // 基类随内容长高（field-sizing: content），封顶后转内部滚动：
+            // 批量文本过长不撑高节点卡片
+            className="max-h-48 min-h-32 resize-none overflow-y-auto font-mono text-xs"
             data-testid="workflow-extract-bulk-textarea"
           />
         </div>

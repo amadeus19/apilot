@@ -52,15 +52,15 @@ APilot 把接口、环境变量、请求历史和多步工作流收进一个本�
 
 从[最新 Release](https://github.com/amadeus19/apilot/releases/latest) 下载安装包：
 
-| 架构 | 推荐（NSIS） | 备选（MSI） |
-| --- | --- | --- |
-| x64 | `APilot_<version>_x64-setup.exe` | `APilot_<version>_x64_en-US.msi` |
-| ARM64 | `APilot_<version>_arm64-setup.exe` | `APilot_<version>_arm64_en-US.msi` |
+| 架构 | 安装包 |
+| --- | --- |
+| x64 | `APilot_<version>_x64-setup.exe` |
+| ARM64 | `APilot_<version>_arm64-setup.exe` |
 
-- NSIS `setup.exe` 是推荐下载；MSI 仅作手动安装备选。
+- NSIS `setup.exe` 是唯一安装包形态。
 - **ARM64 版本为实验性**：已完成构建与产物校验，但尚未在实体 ARM64 硬件上验证。
 - 安装包未做代码签名，Windows SmartScreen 会弹出「Windows 已保护你的电脑」告警——点击**更多信息** → **仍要运行**即可继续。
-- NSIS 安装器按当前用户安装，无需管理员权限、不弹 UAC；MSI 按整机安装，需要管理员权限。
+- NSIS 安装器按当前用户安装，无需管理员权限、不弹 UAC。
 - 需要 Windows 10 或 11 以及 WebView2 运行时（Windows 11 预装；NSIS 安装器在缺失时会自动下载）。
 
 ## 命令行使用
@@ -99,7 +99,6 @@ pnpm tauri build
 
 ```text
 app/apps/web/src-tauri/target/release/bundle/nsis/
-app/apps/web/src-tauri/target/release/bundle/msi/
 ```
 
 构建 ARM64 版本时追加 target triple：

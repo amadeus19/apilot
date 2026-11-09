@@ -544,7 +544,9 @@ function AddVariableDialog({
               aria-label={t('variables.transfer.bulkLabel')}
               placeholder={t('variables.transfer.bulkPlaceholder')}
               spellCheck={false}
-              className="min-h-32 resize-none font-mono text-xs"
+              // 基类随内容长高（field-sizing: content），封顶后转内部滚动：
+              // 批量粘贴长文本不撑高对话框
+              className="max-h-48 min-h-32 resize-none overflow-y-auto font-mono text-xs"
               data-testid="variable-add-bulk-input"
               autoFocus
             />
@@ -770,7 +772,9 @@ function ImportVariablesDialog({
             aria-label={t('variables.transfer.importPasteLabel')}
             placeholder={t('variables.transfer.importPastePlaceholder')}
             spellCheck={false}
-            className="min-h-32 resize-none font-mono text-xs"
+            // 基类随内容长高（field-sizing: content），封顶后转内部滚动：
+            // 粘贴长导入文本不撑高对话框
+            className="max-h-48 min-h-32 resize-none overflow-y-auto font-mono text-xs"
             data-testid="variable-import-input"
             autoFocus
           />

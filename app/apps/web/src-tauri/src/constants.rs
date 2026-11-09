@@ -137,6 +137,12 @@ pub const SYNC_FETCH_REDIRECT_LIMIT: usize = 5;
 /// 文档最深十几层，64 是防深嵌套栈风险的护栏；超限截断并标记 truncated）
 pub const SYNC_SCHEMA_MAX_DEPTH: usize = 64;
 
+/// 同步铺底数组骨架的序列化字节上限（单数组首元素骨架超限回落 `[]`）：
+/// 骨架为线性展开——每数组仅取 1 元素、深度受 [`SYNC_SCHEMA_MAX_DEPTH`]
+/// 截断，总量由字段数与 example 体量决定；护栏防宽 schema 顶到
+/// [`MAX_USER_DATA_BYTES`]（1MB）触发整包回滚，宁可少铺不阻断同步应用
+pub const SYNC_BODY_SKELETON_MAX_BYTES: usize = 64 * 1024;
+
 /// 可达性探测批量并发上限（启动轮 / 手动全量刷新的在途请求界）。
 pub const PROBE_CONCURRENCY: usize = 4;
 

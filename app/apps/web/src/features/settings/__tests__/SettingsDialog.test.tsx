@@ -356,7 +356,7 @@ describe('SettingsDialog', () => {
     expect(await screen.findByText('更新源已保存')).toBeInTheDocument()
   })
 
-  it('设置导航收敛为 7 组：编辑器 / 同步 / 快照搜索均无命中', async () => {
+  it('设置导航收敛为 8 组：编辑器 / 同步 / 快照搜索均无命中', async () => {
     const user = userEvent.setup()
     openSettings()
     const search = screen.getByRole('searchbox', { name: '搜索设置…' })
@@ -366,15 +366,36 @@ describe('SettingsDialog', () => {
       await user.clear(search)
       await user.type(search, term)
       expect(
-        screen.queryByRole('button', { name: /备份|外观|语言|快捷键|HTTP|开发者|关于/ }),
+        screen.queryByRole('button', { name: /通用|备份|外观|语言|快捷键|HTTP|开发者|关于/ }),
       ).not.toBeInTheDocument()
     }
 
-    // 清空搜索后 7 组齐现
+    // 清空搜索后 8 组齐现（通用组在导航第一位）
     await user.clear(search)
+    expect(screen.getAllByRole('button', { name: /通用/ })[0]).toBeInTheDocument()
     for (const name of [/外观/, /语言/, /快捷键/, /HTTP/, /备份/, /开发者/, /关于/]) {
       expect(screen.getByRole('button', { name })).toBeInTheDocument()
     }
+  })
+
+  it('通用组：关闭按钮行为三选一联动 settings store 并写穿落库', async () => {
+    const user = userEvent.setup()
+    openSettings()
+
+    await user.click(screen.getByRole('button', { name: /通用/ }))
+    expect(screen.getByLabelText('关闭按钮行为')).toBeInTheDocument()
+
+    // 默认每次询问（boot 回退默认态）；切「最小化到托盘」即时生效并写穿落库
+    expect(useSettingsStore.getState().closeBehavior).toEqual({ action: 'ask' })
+    await user.click(screen.getByLabelText('关闭按钮行为'))
+    await user.click(screen.getByRole('option', { name: '最小化到托盘' }))
+    expect(useSettingsStore.getState().closeBehavior).toEqual({ action: 'tray' })
+    await vi.waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('set_setting', {
+        key: 'closeBehavior',
+        value: { action: 'tray' },
+      })
+    })
   })
 
   it('备份组转实：导出 / 恢复两动作渲染', async () => {

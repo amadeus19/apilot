@@ -60,39 +60,35 @@ pub async fn download_update(state: State<'_, AppState>) -> Result<Value, AppErr
 
 /// 启动静默安装器（两段式之二）：以版本号重构暂存包（IPC 不接受路径——
 /// StagedUpdate 构造即校验，任意路径无法进入执行面），通过存在性校验后
-/// 暂存为待安装请求并触发关窗——安装器由退出序列末尾 spawn（应用完全
-/// 释放文件锁之后，见 lib.rs shutdown_and_exit），不再由前端盲等关窗。
+/// 暂存为待安装请求，并经退出闸门进入完整退出序列——安装器由退出序列
+/// 末尾 spawn（应用完全释放文件锁之后，见 lib.rs begin_exit）。
+///
+/// 装更新必然走完整退出序列，此为不变量；旁路关窗决策层（closeBehavior
+/// 三分派）落实：
+/// - 不借 `window.close()`：会触发 CloseRequested 走三分派，tray 设置下
+///   窗口被隐藏、更新永不安装；
+/// - 不 emit `app://close-requested` 询问事件：该事件语义＝询问用户（仅
+///   ask 分支），前端将弹出关闭确认弹窗，而弹窗决策无法改变「必然退出
+///   装更新」的结局（选「最小化到托盘」会被超时退出覆盖，语义自相矛盾），
+///   且装更新意向已在就绪对话框确认过；
+/// - 与 exit 分支共用退出闸门入口（lib.rs exit_via_gate）：本命令成功
+///   返回后前端全量收尾（会话保存 + 草稿 flush）并 ack（app.ready_to_exit），
+///   退出序列立即进入；前端不可达时闸门超时兜底放行。
 #[tauri::command]
 pub fn install_update(
     app: AppHandle,
     state: State<'_, AppState>,
     version: String,
 ) -> Result<(), AppError> {
-    use tauri::Manager;
-
     let staged = crate::services::update_source::StagedUpdate::from_version(&version)?;
     staged.verify_launchable()?;
     *state
         .install_request
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(staged);
-    // 关窗失败必须回滚意向（资源四问：取消 / 失败路径）——残留的请求会让
-    // 此后任意一次正常退出在 shutdown 末尾意外 spawn 安装器
-    let closed = (|| {
-        let window = app
-            .get_webview_window("main")
-            .ok_or_else(|| AppError::internal("main window not available for update close"))?;
-        window
-            .close()
-            .map_err(|err| AppError::internal(format!("failed to close window for update: {err}")))
-    })();
-    if let Err(err) = closed {
-        *state
-            .install_request
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
-        return Err(err);
-    }
+    // 校验失败在此前 return；暂存后无中途失败路径（闸门 arm / spawn 不可
+    // 失败），无需回滚意向
+    crate::exit_via_gate(app, "update_install");
     Ok(())
 }
 
@@ -119,4 +115,19 @@ pub fn discard_staged_update(version: String) -> Result<(), AppError> {
 pub async fn app_ready_to_exit(state: tauri::State<'_, AppState>) -> Result<(), AppError> {
     state.exit_gate.ack();
     Ok(())
+}
+
+/// app.confirm_exit：关闭确认弹窗「退出应用」路径（前端 flush 完成后调用，
+/// ask 分支用户决策的放行出口）。Command 层只做转发，放行序列见 lib.rs
+/// confirm_exit_now。
+#[tauri::command(rename = "app.confirm_exit")]
+pub fn app_confirm_exit(app: AppHandle) {
+    crate::confirm_exit_now(app);
+}
+
+/// app.hide_to_tray：关闭确认弹窗「最小化到托盘」路径（ask 分支用户决策）。
+/// Command 层只做转发与错误转换，窗口操作见 tray::hide_main_window。
+#[tauri::command(rename = "app.hide_to_tray")]
+pub fn app_hide_to_tray(app: AppHandle) -> Result<(), AppError> {
+    crate::tray::hide_main_window(&app)
 }

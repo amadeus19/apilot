@@ -9,6 +9,8 @@ import { useI18n } from '@/i18n'
 
 import { nodeKindOf, type WorkflowNode, type WorkflowPanelGroup } from '../workflow-model'
 import type { WorkflowFlowNode } from '../canvas-converter'
+import { useWorkflowEditorStore, type WorkflowEditorSession } from '../workflow-editor.store'
+import { WorkflowIdContext } from './workflow-id-context'
 import { InvalidRefContext } from './validation-context'
 import { NODE_ICONS, NODE_LABEL_KEYS, NODE_META } from './node-meta'
 import {
@@ -52,6 +54,39 @@ const HEAD_ICON: Record<WorkflowPanelGroup, string> = {
  * 并行节点收窄，避免空白卡占出多余的画布面积 */
 const PROCESS_WIDTH: Partial<Record<string, string>> = { parallel: 'w-44' }
 
+/** 会话图内按 id 取节点（会话缺席 / 节点不在图内返回 undefined） */
+function findSessionNode(
+  session: WorkflowEditorSession | undefined,
+  id: string,
+): WorkflowNode | undefined {
+  return session?.graph.nodes.find((node) => node.id === id)
+}
+
+/**
+ * 节点内容（名称＋配置）的同拍数据源：编辑会话图优先，data.node 兜底。
+ *
+ * React Flow 受控 nodes 经 effect 异步灌入其内部 store，自定义节点拿到的
+ * data.node 比键入晚一拍——节点内受控输入（Body 覆写、覆写行、名称等）在
+ * 输入事件收尾时先被 React 回写成旧值（光标随之落到末尾），新值随后才到，
+ * 表现为中间插入时光标跳尾。会话图在更新通道（sync）内同步落定，节点内
+ * 输入读它即与键入同拍。名称与配置分开订阅：会话图每次整图重建，但未改动
+ * 节点的 config 引用与 name 原值不变，无关节点不重渲。会话图里没有的节点
+ * （会话缺席等）回落 data.node。
+ */
+function useSessionNodeContent(id: string, fallback: WorkflowNode): WorkflowNode {
+  const workflowId = React.useContext(WorkflowIdContext)
+  const name = useWorkflowEditorStore((s) =>
+    workflowId != null ? findSessionNode(s.sessions[workflowId], id)?.name : undefined,
+  )
+  const config = useWorkflowEditorStore((s) =>
+    workflowId != null ? findSessionNode(s.sessions[workflowId], id)?.config : undefined,
+  )
+  return React.useMemo(
+    () => (name === undefined || config === undefined ? fallback : { ...fallback, name, config }),
+    [fallback, name, config],
+  )
+}
+
 /**
  * 工作流节点卡片（11 类共用壳，kind 驱动图标、标题条分组色与配置编辑面）：
  * Postman Flow 式「配置即节点内容」——名称在标题条内双击编辑，配置编辑面
@@ -70,7 +105,7 @@ const PROCESS_WIDTH: Partial<Record<string, string>> = { parallel: 'w-44' }
  */
 export function WorkflowNodeCard({ id, data, selected }: NodeProps<WorkflowFlowNode>) {
   const { t } = useI18n()
-  const node = data.node
+  const node = useSessionNodeContent(id, data.node)
   const kind = nodeKindOf(node.config)
   const Icon = NODE_ICONS[kind]
   const request = kind === 'request' && node.config.type === 'request' ? node.config : null

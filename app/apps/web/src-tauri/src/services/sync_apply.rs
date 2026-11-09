@@ -359,7 +359,8 @@ fn is_json_family_media_type(content_type: &str) -> bool {
 /// 用户 body 与文档请求体骨架对齐（补缺键、删骨架外键、已有值永不被覆盖
 /// ——装配层护栏）。外层 `None`＝不写回：文档无 JSON 请求体、用户体不可
 /// 合并（原文保真）或对齐后无变化；`Some(None)`＝骨架无内容可铺（保持空）。
-/// 骨架铺底（用户无 body）时全量 Fill 文档示例值，写回为 json 信封。
+/// 骨架铺底（用户无 body）时 body 级 example 优先（非空 object / 非空 array
+/// 才整体采用），否则全量 Fill 文档骨架示例值，写回为 json 信封。
 fn align_body_value(user_body: Option<&str>, op: &UnifiedOperation) -> Option<Option<String>> {
     // 仅 JSON 家族请求体有对齐面（normalize 择优后通常已是精确
     // application/json；+json 变体与 text/json 同为键结构，家族判定作保底）
@@ -387,7 +388,19 @@ fn align_body_value(user_body: Option<&str>, op: &UnifiedOperation) -> Option<Op
     };
     match user_text.as_deref() {
         None => {
-            let merged = merge::align(None, &body.schema);
+            // 首次铺底优先 body 级 example（example 优先与文档抽屉、工作流
+            // 预填同口径）：仅非空 object / 非空 array 整体采用——标量 example
+            // 写成请求体是 JSON 字面量而非键结构，空容器无内容可铺，均回落
+            // align 骨架
+            let merged = match &body.example {
+                Some(example)
+                    if example.as_object().is_some_and(|o| !o.is_empty())
+                        || example.as_array().is_some_and(|a| !a.is_empty()) =>
+                {
+                    example.clone()
+                }
+                _ => merge::align(None, &body.schema),
+            };
             if merged.is_null() || merged.as_object().is_some_and(|o| o.is_empty()) {
                 return None;
             }
@@ -1059,7 +1072,9 @@ mod tests {
     const BODY_SCHEMA: &str = r#"{"type": "object", "properties": {
         "name": {"type": "string"},
         "email": {"type": "string", "example": "a@b.c"},
-        "age": {"type": "integer"}
+        "age": {"type": "integer"},
+        "tagIds": {"type": "array", "items": {"type": "integer"}},
+        "addr": {"type": "object", "properties": {"city": {"type": "string"}}}
     }}"#;
 
     /// GET 接口带一个 query 参数（page，integer，带描述）。
@@ -1182,6 +1197,13 @@ mod tests {
         assert!(
             body.get("name").is_some() && body.get("age").is_some(),
             "骨架键全量铺底"
+        );
+        // 数组铺 [首元素骨架]、嵌套对象递归铺全
+        assert_eq!(body["tagIds"], serde_json::json!([0]), "数组铺首元素骨架");
+        assert_eq!(
+            body["addr"],
+            serde_json::json!({"city":""}),
+            "嵌套对象递归铺全"
         );
         // GET 的 params 面保持不变（对齐幂等：无补无删不写回）
         let ud = user_row(&pool, "GET /users").await.unwrap();
@@ -1488,8 +1510,10 @@ mod tests {
             &post_openapi3(&[("/users", &four_media_types_content())]),
         )
         .await;
-        // 用户填了骨架全部键（含 age），值与骨架 fill 语义一致之外的自由排版
-        let user_text = r#"{"name":"张三","email":"a@b.c","age":1}"#;
+        // 用户填了骨架全部键（含数组与嵌套字段），值与骨架 fill 语义一致
+        // 之外的自由排版
+        let user_text =
+            r#"{"name":"张三","email":"a@b.c","age":1,"tagIds":[0],"addr":{"city":""}}"#;
         let envelope = format!(
             r#"{{"kind":"json","text":{}}}"#,
             serde_json::to_string(user_text).unwrap()
@@ -1548,5 +1572,139 @@ mod tests {
         let ud = user_row(&pool, "POST /users").await.expect("变体媒型铺底");
         let body = envelope_json_text(&ud.body.expect("骨架铺底"));
         assert_eq!(body["patched"], "v1");
+    }
+
+    /// 根级 array body：POST 体直接是数组时铺出 [首元素骨架] 请求体。
+    #[tokio::test]
+    async fn root_level_array_body_seeds_element_skeleton() {
+        let pool = memory_pool().await;
+        seeded(&pool).await;
+        fetch_seed(
+            &pool,
+            &post_swagger(
+                "/bulk",
+                r#"{"type": "array", "items": {"type": "object", "properties": {"id": {"type": "integer"}}}}"#,
+            ),
+        )
+        .await;
+
+        apply(&pool, "s1", None).await.unwrap();
+        let ud = user_row(&pool, "POST /bulk").await.expect("根级数组体铺底");
+        let body = envelope_json_text(&ud.body.expect("骨架铺底"));
+        assert_eq!(body, serde_json::json!([{"id": 0}]), "根级数组铺首元素骨架");
+    }
+
+    /// 首次铺底优先 body 级 example（example 优先与文档抽屉、工作流预填同
+    /// 口径）：非空 object example 整体采用（含 schema 外键），不铺 align 骨架。
+    #[tokio::test]
+    async fn body_level_example_preferred_over_skeleton_fill() {
+        let pool = memory_pool().await;
+        seeded(&pool).await;
+        let content = r#"{"application/json": {
+            "schema": {"type": "object", "properties": {"name": {"type": "string"}, "age": {"type": "integer"}}},
+            "example": {"name": "示例整体", "tagList": [7, 8]}
+        }}"#;
+        fetch_seed(&pool, &post_openapi3(&[("/users", content)])).await;
+
+        apply(&pool, "s1", None).await.unwrap();
+        let ud = user_row(&pool, "POST /users").await.expect("铺底");
+        let body = envelope_json_text(&ud.body.expect("骨架铺底"));
+        assert_eq!(
+            body,
+            serde_json::json!({"name": "示例整体", "tagList": [7, 8]}),
+            "body 级 example 整体采用（优先于骨架 fill，name 不铺骨架空串）"
+        );
+    }
+
+    /// 不做 null 自愈（用户值永不被覆盖的 null 面）：用户已写入 null 的
+    /// body 字段重新同步后保持 null，不被骨架占位替换；骨架内其余用户值
+    /// 与缺键补底照常。
+    #[tokio::test]
+    async fn user_held_null_body_field_survives_resync() {
+        let pool = memory_pool().await;
+        seeded(&pool).await;
+        fetch_seed(&pool, &post_swagger("/users", BODY_SCHEMA)).await;
+        seed_user_row(
+            &pool,
+            "POST /users",
+            Some(r#"{"name":"张三","tagIds":null}"#),
+            "[]",
+        )
+        .await;
+
+        apply(&pool, "s1", None).await.unwrap();
+
+        let ud = user_row(&pool, "POST /users").await.unwrap();
+        let body = envelope_json_text(&ud.body.unwrap());
+        assert_eq!(
+            body["tagIds"],
+            serde_json::Value::Null,
+            "已写入的 null 保持原样（不自愈）"
+        );
+        assert_eq!(body["name"], "张三", "骨架内用户值保留");
+    }
+
+    /// 字典对象（骨架无 properties，键集合归用户）的用户内容重新同步后原样
+    /// 保留：嵌套字段与根级请求体同规则，对齐结果与用户值等价＝body 列不写回。
+    #[tokio::test]
+    async fn user_held_dict_object_survives_resync() {
+        let pool = memory_pool().await;
+        seeded(&pool).await;
+        let nested = r#"{"application/json": {"schema": {"type": "object", "properties": {"name": {"type": "string"}, "meta": {"type": "object"}}}}}"#;
+        let root = r#"{"application/json": {"schema": {"type": "object"}}}"#;
+        fetch_seed(
+            &pool,
+            &post_openapi3(&[("/users", nested), ("/dict", root)]),
+        )
+        .await;
+        let nested_body = r#"{"name":"张三","meta":{"k1":"v1"}}"#;
+        let root_body = r#"{"k1":"v1"}"#;
+        seed_user_row(&pool, "POST /users", Some(nested_body), "[]").await;
+        seed_user_row(&pool, "POST /dict", Some(root_body), "[]").await;
+
+        apply(&pool, "s1", None).await.unwrap();
+
+        let ud = user_row(&pool, "POST /users").await.unwrap();
+        assert_eq!(
+            ud.body.as_deref(),
+            Some(nested_body),
+            "嵌套字典对象的用户内容原样保留"
+        );
+        let ud = user_row(&pool, "POST /dict").await.unwrap();
+        assert_eq!(
+            ud.body.as_deref(),
+            Some(root_body),
+            "根级字典请求体原样保留"
+        );
+    }
+
+    /// body 级 example 为标量（字符串）或空容器（空对象）时不整体采用：回落
+    /// align 骨架铺底。
+    #[tokio::test]
+    async fn scalar_or_empty_body_example_falls_back_to_skeleton() {
+        let pool = memory_pool().await;
+        seeded(&pool).await;
+        let schema = r#"{"type": "object", "properties": {"name": {"type": "string"}, "age": {"type": "integer"}}}"#;
+        let string_example =
+            format!(r#"{{"application/json": {{"schema": {schema}, "example": "纯文本示例"}}}}"#);
+        let empty_example =
+            format!(r#"{{"application/json": {{"schema": {schema}, "example": {{}}}}}}"#);
+        fetch_seed(
+            &pool,
+            &post_openapi3(&[("/strings", &string_example), ("/empties", &empty_example)]),
+        )
+        .await;
+
+        apply(&pool, "s1", None).await.unwrap();
+
+        for key in ["POST /strings", "POST /empties"] {
+            let ud = user_row(&pool, key).await.expect("铺底建行");
+            let body = envelope_json_text(&ud.body.expect("回落骨架铺底"));
+            assert_eq!(
+                body,
+                serde_json::json!({"name": "", "age": 0}),
+                "{key}：example 不整体采用，回落 align 骨架"
+            );
+        }
     }
 }

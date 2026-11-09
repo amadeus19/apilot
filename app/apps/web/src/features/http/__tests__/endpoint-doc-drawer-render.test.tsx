@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { workbenchKeys } from '@/services/workbench-api'
@@ -118,6 +118,10 @@ describe('接口文档抽屉失效回流', () => {
     expect(await screen.findByText('请求体示例')).toBeTruthy()
     // 生成示例含骨架字段（string 类型 → "string"）
     expect(screen.getAllByText('"string"').length).toBeGreaterThan(0)
+    // 示例区经共享 JsonView 呈现：区域放行划选（select-text）＋悬浮复制
+    const surface = screen.getByTestId('json-view')
+    expect(surface).toHaveClass('select-text')
+    expect(within(surface).getByRole('button', { name: '复制' })).toBeTruthy()
     view.unmount()
   })
 })

@@ -13,9 +13,11 @@ pub mod domain;
 pub mod error;
 mod infrastructure;
 mod services;
+mod tasks;
 #[cfg(test)]
 pub(crate) mod test_support;
-mod tasks;
+// 系统托盘（tray-icon feature）：构建、菜单文案归档与主窗口 show/hide 共用面
+mod tray;
 
 use std::path::Path;
 
@@ -70,14 +72,14 @@ pub fn http_service_from_cache(cache: &SettingsCache) -> services::http::HttpSer
     }
 }
 
-/// 统一 Shutdown 序列：CloseRequested（含 Alt+F4，
-/// Windows 同路触发）→ prevent_close 接管 → 任务排空 + flush 日志 + 关闭
-/// 连接池 → 待安装请求 spawn 安装器 → cleanup → 退出码 0。DB 初始化失败的
-/// 实例 pool 为空，只走任务清理与日志 flush。
-async fn shutdown_and_exit(app: tauri::AppHandle) {
+/// 统一退出序列（进程唯一退出入口）：关窗决策层、托盘「退出」菜单、
+/// 关闭确认弹窗放行与装更新旁路共用。任务排空 + flush 日志 + 关闭连接池
+/// → 待安装请求 spawn 安装器 → cleanup → 退出码 0。DB 初始化失败的实例
+/// pool 为空，只走任务清理与日志 flush。全序列幂等：重复进入收敛安全。
+pub(crate) async fn begin_exit(app: tauri::AppHandle) {
     use tauri::Manager;
 
-    let state: tauri::State<AppState> = app.state();
+    let state = app.state::<AppState>();
     let pool = state.db.as_ref().ok().map(|db| &db.pool);
     tasks::shutdown(&state.tasks, pool).await;
     // 响应临时文件随会话清空（Tab 绑定生命周期的进程侧兜底）
@@ -102,6 +104,134 @@ async fn shutdown_and_exit(app: tauri::AppHandle) {
     app.cleanup_before_exit();
     tracing::info!("exiting with code 0");
     app.exit(0);
+}
+
+// —— 关窗决策层（CloseRequested 唯一入口的三分派）——
+
+/// closeBehavior 三分派决策值。契约：设置值 `{ "action": "ask" | "tray" |
+/// "exit" }`，默认 ask；Rust 只校验键名（值校验在前端 zod，沿用现有分工）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CloseAction {
+    /// 每次询问：仅 emit 询问事件，等用户在弹窗决策（不 arm 闸门、不设超时）
+    Ask,
+    /// 最小化到托盘：隐藏主窗口 + 托盘常驻，不退出
+    Tray,
+    /// 直接退出：走退出闸门（前端 flush ack / 超时兜底）后进入退出序列
+    Exit,
+}
+
+/// 从设置值解析关闭行为（纯函数）：取 `action` 字符串匹配三分支；缺失 /
+/// 脏值回落默认 ask——与前端 `SETTINGS_DEFAULTS.closeBehavior` 一致，Rust
+/// 不复制 zod 校验，只做宽松归档，脏设置永不引发意外退出。
+fn close_action_from_value(value: Option<&serde_json::Value>) -> CloseAction {
+    match value
+        .and_then(|value| value.get("action"))
+        .and_then(|action| action.as_str())
+    {
+        Some("exit") => CloseAction::Exit,
+        Some("tray") => CloseAction::Tray,
+        _ => CloseAction::Ask,
+    }
+}
+
+/// 关闭行为决策（纯函数，可测）：设置缓存不可用（DB 初始化失败，
+/// BootErrorScreen 全屏阻断场景）→ `None`，调用方回落直接退出——等同
+/// 现状即时化，不弹窗不等待（错误页下无可保存的会话）；缓存可用按
+/// `closeBehavior` 键解析（缺失 / 脏值默认 ask）。
+fn resolve_close_action(cache: Option<&SettingsCache>) -> Option<CloseAction> {
+    let cache = cache?;
+    Some(close_action_from_value(
+        cache.get(services::settings::CLOSE_BEHAVIOR_KEY).as_ref(),
+    ))
+}
+
+/// CloseRequested 决策分派（点 X / Alt+F4 / win.close() 同路）。调用方已
+/// prevent_close 接管默认销毁。
+pub(crate) fn dispatch_close_requested(app: &tauri::AppHandle) {
+    use tauri::Manager;
+
+    let action = {
+        let state = app.state::<AppState>();
+        resolve_close_action(state.db.as_ref().ok().map(|db| &db.cache))
+    };
+    let Some(action) = action else {
+        // 设置读取失败（DB 损坏等）：回落直接进入退出序列。基础设施接线
+        // 不进 registry（begin_exit 自身不能依赖被排空的对象）
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move { begin_exit(app).await });
+        return;
+    };
+    match action {
+        CloseAction::Exit => exit_via_gate(app.clone(), "close"),
+        CloseAction::Tray => {
+            // 不走闸门、不退出：窗口隐藏 + 托盘常驻。隐藏失败留痕——窗口
+            // 保持原状，等效「什么都不发生」，不因此强行退出
+            if let Err(err) = tray::hide_main_window(app) {
+                tracing::error!(message = %err, "close-to-tray window hide failed");
+            }
+        }
+        CloseAction::Ask => {
+            use tauri::Emitter;
+
+            // 仅 emit 询问事件。不 arm 闸门、不设超时：弹窗在等用户决策，
+            // 用户取消（Esc / 点弹窗外）＝什么都不发生（窗口原样保留）；
+            // 若在此 arm 闸门，超时兜底会在用户犹豫期间强退，违背「询问」
+            // 语义。退出 / 托盘由用户决策后的 app.confirm_exit /
+            // app.hide_to_tray 命令收口（前端 flush 完才调前者）。
+            // emit 失败＝前端收不到询问、点关闭无反应，留痕供诊断
+            if let Err(err) = app.emit("app://close-requested", ()) {
+                tracing::warn!(error = %err, "close-requested ask event emit failed, close request has no effect");
+            }
+        }
+    }
+}
+
+/// 经退出闸门进入退出序列（exit 分支与装更新旁路共用入口）：arm 闸门 →
+/// 等前端收尾 ack（`app.ready_to_exit`）或超时兜底 → `begin_exit`。给前端
+/// 一次会话保存 + 草稿 flush 的机会，前端不可达时到点放行，退出绝不因
+/// 收尾挂死。ack 来源：exit 分支＝前端经 Tauri 内置 onCloseRequested 感知
+/// 关窗、flush 后 ack；装更新旁路＝前端在 install_update 成功返回后 flush
+/// 再 ack。不 emit `app://close-requested`（该事件语义＝询问用户，仅 ask
+/// 分支发）。`trigger` 只进超时日志，区分两路来源。
+pub(crate) fn exit_via_gate(app: tauri::AppHandle, trigger: &'static str) {
+    use tauri::Manager;
+
+    // 重复进入（重复关窗 / 重复装更新）会覆盖闸门发送端，先前等待端随
+    // drop 失效，收敛安全
+    let ack_receiver = { app.state::<AppState>().exit_gate.arm() };
+    // 基础设施接线（非业务任务）：不进 registry——shutdown 序列自身
+    // 不能依赖被排空的对象。重复进入会并发多个序列，
+    // 但 close/cancel/wait/flush/pool.close/exit 全幂等，收敛安全
+    tauri::async_runtime::spawn(async move {
+        if tokio::time::timeout(
+            std::time::Duration::from_millis(constants::EXIT_ACK_TIMEOUT_MS),
+            ack_receiver,
+        )
+        .await
+        .is_err()
+        {
+            tracing::warn!(
+                trigger,
+                "frontend exit ack timed out, proceeding with shutdown"
+            );
+        }
+        begin_exit(app).await;
+    });
+}
+
+/// 关闭确认弹窗「退出应用」路径的放行序列：arm 闸门 → 立即 ack 等价（无
+/// 挂起等待者）→ 进入退出序列。防重入不靠闸门：begin_exit 全序列幂等
+/// （close/cancel/wait/flush/pool.close/exit 全幂等），重复调用收敛安全。
+pub(crate) fn confirm_exit_now(app: tauri::AppHandle) {
+    use tauri::Manager;
+
+    {
+        let state = app.state::<AppState>();
+        let receiver = state.exit_gate.arm();
+        state.exit_gate.ack();
+        drop(receiver);
+    }
+    tauri::async_runtime::spawn(async move { begin_exit(app).await });
 }
 
 /// 初始化数据库：备份恢复替换链（段一开库前 → 连接 → 完整性校验 → 迁移 →
@@ -137,6 +267,12 @@ async fn init_db(app_data_dir: &Path) -> Result<Db, AppError> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+    // 防双开（官方插件）：二次启动只唤起已有主窗口（托盘常驻的事实标配；
+    // 双开共用同一 SQLite 与日志目录有实害）。必须第一个注册——官方要求
+    // 在 setup 前生效。回调运行在首次实例进程内。
+    .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+      tray::show_main_window(app);
+    }))
     .plugin(tauri_plugin_os::init())
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_dialog::init())
@@ -227,46 +363,25 @@ pub fn run() {
         // 才起；失败静默——探测是尽力事实，失败态留给手动刷新重试）
         tasks::spawn_probe_startup(app.state::<AppState>().clone());
       });
+      // 系统托盘（setup 一次构建，随进程退出释放）：菜单文案按启动时设置
+      // 固化；构建失败留痕不阻断启动（见 tray::build_tray）
+      tray::build_tray(app.handle());
       tracing::info!(version = env!("CARGO_PKG_VERSION"), "apilot started");
       Ok(())
     })
     .on_window_event(|window, event| {
-      use tauri::Manager;
-      // 关窗统一接管：CloseRequested 与 Alt+F4 同路。
-      // Phase 1 单窗口假设：任一窗口关闭即整应用退出；多窗口落地时
-      // 需按窗口 label 分流（辅助窗口关闭不应触发 shutdown）
-      // prevent_close 后异步执行 shutdown 序列，完成才真正退出
+      // 关窗统一接管：点 X / Alt+F4 / win.close() 同路进入 CloseRequested。
+      // 单窗口假设：应用只有主窗口，关闭请求不按窗口 label 分流，一律交
+      // 决策层按 closeBehavior 三分派（ask 询问 / tray 隐藏到托盘 / exit
+      // 经退出闸门进入退出序列）。
+      // 拦截默认销毁：不 prevent_close 则窗口即刻销毁 → ExitRequested →
+      // 进程退出与退出序列竞速（有任务时事件循环必赢，序列失去完成保证）；
+      // ask / tray 两分支本就要求窗口存活
       if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-        use std::time::Duration;
+        use tauri::Manager;
 
-        use tauri::Emitter;
-
-        // 拦截默认销毁：不 prevent_close 则窗口即刻销毁 → ExitRequested →
-        // 进程退出与 shutdown 序列竞速（有任务时事件循环必赢，序列失去完成保证）
         api.prevent_close();
-        let app = window.app_handle().clone();
-        // 退出闸门：给前端一次会话保存 + 草稿 flush 的机会，ack 或超时后放行
-        // （重复 CloseRequested 会覆盖闸门发送端，先前等待端随 drop 失效，收敛安全）
-        let ack_receiver = {
-          let state: tauri::State<AppState> = app.state();
-          state.exit_gate.arm()
-        };
-        let _ = app.emit("app://close-requested", ());
-        // 基础设施接线（非业务任务）：不进 registry——shutdown 序列自身
-        // 不能依赖被排空的对象。重复 CloseRequested 会并发多个序列，
-        // 但 close/cancel/wait/flush/pool.close/exit 全幂等，收敛安全
-        tauri::async_runtime::spawn(async move {
-          if tokio::time::timeout(
-            Duration::from_millis(crate::constants::EXIT_ACK_TIMEOUT_MS),
-            ack_receiver,
-          )
-          .await
-          .is_err()
-          {
-            tracing::warn!("frontend close ack timed out, proceeding with shutdown");
-          }
-          shutdown_and_exit(app).await;
-        });
+        dispatch_close_requested(window.app_handle());
       }
     })
     .invoke_handler(tauri::generate_handler![
@@ -281,6 +396,9 @@ pub fn run() {
       commands::system::list_staged_updates,
       commands::system::discard_staged_update,
       commands::system::app_ready_to_exit,
+      // 关闭确认弹窗的用户决策出口（ask 分支）：退出 / 托盘
+      commands::system::app_confirm_exit,
+      commands::system::app_hide_to_tray,
       // CLI（设置「开发者 › 高级」）：PATH 注册 / 注销与状态聚合探测
       commands::cli::register_cli_path,
       commands::cli::unregister_cli_path,
@@ -394,4 +512,66 @@ pub fn run() {
         services::logging::shutdown_flush();
       }
     });
+}
+
+#[cfg(test)]
+mod close_decision_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn close_action_parses_all_three_branches() {
+        assert_eq!(
+            close_action_from_value(Some(&json!({"action": "ask"}))),
+            CloseAction::Ask
+        );
+        assert_eq!(
+            close_action_from_value(Some(&json!({"action": "tray"}))),
+            CloseAction::Tray
+        );
+        assert_eq!(
+            close_action_from_value(Some(&json!({"action": "exit"}))),
+            CloseAction::Exit
+        );
+    }
+
+    #[test]
+    fn close_action_defaults_to_ask_on_missing_or_dirty_value() {
+        // 键缺失与脏值（非对象 / action 缺失 / 非法枚举 / 非字符串）一律回落
+        // 默认 ask：Rust 不复制前端 zod 校验，脏设置永不引发意外退出
+        assert_eq!(close_action_from_value(None), CloseAction::Ask);
+        assert_eq!(
+            close_action_from_value(Some(&json!("bogus"))),
+            CloseAction::Ask
+        );
+        assert_eq!(close_action_from_value(Some(&json!({}))), CloseAction::Ask);
+        assert_eq!(
+            close_action_from_value(Some(&json!({"action": "nope"}))),
+            CloseAction::Ask
+        );
+        assert_eq!(
+            close_action_from_value(Some(&json!({"action": 1}))),
+            CloseAction::Ask
+        );
+    }
+
+    #[test]
+    fn resolve_falls_back_to_immediate_exit_when_cache_unavailable() {
+        // 设置缓存不可用（DB 初始化失败 / BootErrorScreen 全屏阻断场景）→
+        // None → 调用方直接 begin_exit，不弹窗不等待
+        assert_eq!(resolve_close_action(None), None);
+    }
+
+    #[test]
+    fn resolve_reads_close_behavior_from_cache() {
+        let cache = SettingsCache::default();
+        cache.insert(
+            services::settings::CLOSE_BEHAVIOR_KEY.to_owned(),
+            json!({"action": "exit"}),
+        );
+        assert_eq!(resolve_close_action(Some(&cache)), Some(CloseAction::Exit));
+        // 缓存在但键缺失 → 默认 ask（弹窗询问）
+        let empty = SettingsCache::default();
+        assert_eq!(resolve_close_action(Some(&empty)), Some(CloseAction::Ask));
+    }
 }

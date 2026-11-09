@@ -147,6 +147,25 @@ describe('parseSettings（Zod 校验）', () => {
     expect(broken.invalidKeys).toEqual(['autoCheckUpdates'])
   })
 
+  it('closeBehavior：三态合法值解析，缺失 = 默认 ask，非法 action 回落默认并登记', () => {
+    expect(parseSettings({ closeBehavior: { action: 'tray' } }).closeBehavior).toEqual({
+      action: 'tray',
+    })
+    expect(parseSettings({ closeBehavior: { action: 'exit' } }).closeBehavior).toEqual({
+      action: 'exit',
+    })
+    expect(parseSettings({}).closeBehavior).toEqual(SETTINGS_DEFAULTS.closeBehavior)
+
+    // 非法枚举与越界类型都判脏：整体回退默认（ask）并登记键名
+    const brokenEnum = parseSettings({ closeBehavior: { action: 'minimize' } })
+    expect(brokenEnum.closeBehavior).toEqual(SETTINGS_DEFAULTS.closeBehavior)
+    expect(brokenEnum.invalidKeys).toEqual(['closeBehavior'])
+
+    const brokenType = parseSettings({ closeBehavior: { action: 42 } })
+    expect(brokenType.closeBehavior).toEqual(SETTINGS_DEFAULTS.closeBehavior)
+    expect(brokenType.invalidKeys).toEqual(['closeBehavior'])
+  })
+
   it('http：缺失键回退默认（不限制 / 跟随 / 校验 / 无代理）', () => {
     expect(parseSettings({}).http).toEqual(SETTINGS_DEFAULTS.http)
     expect(parseSettings({}).http).toEqual({

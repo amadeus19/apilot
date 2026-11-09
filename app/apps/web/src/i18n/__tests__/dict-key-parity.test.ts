@@ -25,7 +25,7 @@ const SNAPSHOT: Readonly<Record<string, readonly [count: number, hash: string]>>
   historyDetail: [22, '8b8471fe7208f397'],
   keybindings: [10, '5f169ca9f7c6937f'],
   response: [83, 'ab7312084878a8e2'],
-  settings: [157, '65a5f2ca8d47caa4'],
+  settings: [169, 'ca7d11614a751398'],
   shell: [47, '372be7472a286fcb'],
   statusBar: [6, '89d24b7f5affa6cb'],
   sync: [59, 'da3dd1c45b8586c0'],
@@ -275,8 +275,13 @@ const SNAPSHOT: Readonly<Record<string, readonly [count: number, hash: string]>>
  * 云端错误码映射补键（errors 域，随 Rust 侧云端拉取码登记）：
  * UPDATE_SOURCE_NOT_FOUND / UPDATE_SOURCE_RETRIES_EXHAUSTED（76→78）；
  * 总键 1149→1151。
+ * 关闭行为设置与确认弹窗（主窗口关闭按钮行为三态，2026-11-09）：settings 域
+ * 增通用组导航两键（navGeneral/navGeneralDesc）、关闭按钮行为三选一五键
+ * （closeBehaviorLabel/Desc/Ask/Tray/Exit）、关闭确认弹窗五键
+ * （closeConfirmTitle/Desc/Tray/Exit/Remember）共 12 键（157→169）；
+ * 总键 1151→1163。
  */
-const TOTAL_KEYS = 1151
+const TOTAL_KEYS = 1163
 
 /** 与 core.ts lookup 同口径的叶子判定：string 或含 other 键的复数节点 */
 function walkKeys(node: unknown, prefix: string, out: string[]): void {

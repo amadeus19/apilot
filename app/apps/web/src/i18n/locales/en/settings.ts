@@ -1,11 +1,13 @@
 /**
- * Settings panel: group names, setting rows and action copy for the 7-group information architecture.
+ * Settings panel: group names, setting rows and action copy for the 8-group information architecture.
  */
 export const settings = {
   title: 'Settings',
   description: 'App preferences and feature configuration',
   searchPlaceholder: 'Search settings…',
 
+  navGeneral: 'General',
+  navGeneralDesc: 'App behaviors such as window closing',
   navAppearance: 'Appearance',
   navAppearanceDesc: 'Theme and accent color',
   navLanguage: 'Language',
@@ -51,6 +53,22 @@ export const settings = {
   navAboutDesc: 'Version and license',
 
   searchNoResults: 'No matching settings',
+
+  // General group (close button behavior)
+  closeBehaviorLabel: 'Close button behavior',
+  closeBehaviorDesc: 'What happens when the window close button is clicked',
+  closeBehaviorAsk: 'Ask every time',
+  closeBehaviorTray: 'Minimize to tray',
+  closeBehaviorExit: 'Exit the app',
+
+  // Close confirmation dialog (shown for close requests in ask mode;
+  // Esc / clicking outside cancels — no action bound)
+  closeConfirmTitle: 'Close APilot?',
+  closeConfirmDesc:
+    'Choose what the close button does; you can change it later under Settings → General → Close button behavior.',
+  closeConfirmTray: 'Minimize to tray',
+  closeConfirmExit: 'Exit the app',
+  closeConfirmRemember: 'Remember my choice',
 
   themeLabel: 'Theme',
   themeDesc: 'Choose light, dark, or follow the system',

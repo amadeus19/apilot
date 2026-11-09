@@ -8,6 +8,7 @@ import {
   resolveTheme,
   SETTINGS_DEFAULTS,
   type AccentName,
+  type CloseBehaviorAction,
   type HttpSetting,
   type LocalePreference,
   type LogLevel,
@@ -47,6 +48,8 @@ interface SettingsState extends ParsedSettings, SystemTruth {
   setUpdateSource: (setting: UpdateSourceSetting) => void
   /** 自动检查更新开关（boot 静默检查的闸门；关 = 仅手动检查） */
   setAutoCheckUpdates: (enabled: boolean) => void
+  /** 关闭按钮行为（弹窗「记住我的选择」与设置面板三选一共用写入口） */
+  setCloseBehavior: (action: CloseBehaviorAction) => void
   /** 左栏宽度持久化（分栏库 onResize 防抖后调用；null = 清除定制恢复默认） */
   setShellLeftPanelWidth: (width: number | null) => void
   /** 命令键位覆盖写入（null = 显式清空；仅覆盖项落库） */
@@ -140,6 +143,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const autoCheckUpdates = { ...get().autoCheckUpdates, enabled }
     set({ autoCheckUpdates })
     persist('autoCheckUpdates', autoCheckUpdates)
+  },
+
+  setCloseBehavior: (action) => {
+    const closeBehavior = { ...get().closeBehavior, action }
+    set({ closeBehavior })
+    persist('closeBehavior', closeBehavior)
   },
 
   setHttp: (patch) => {

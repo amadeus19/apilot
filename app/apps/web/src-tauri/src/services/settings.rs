@@ -16,6 +16,13 @@ use tauri::AppHandle;
 use crate::constants::{MAX_SETTING_KEYS, MAX_SETTING_VALUE_BYTES};
 use crate::error::AppError;
 
+/// 设置键字面量（Rust 侧读取单点：关窗决策层 / 托盘菜单按此读缓存；
+/// 写入白名单 `EXACT_KEYS` 引用同源，防读写两处字面量漂移）
+pub const LOCALE_KEY: &str = "locale";
+/// 关闭按钮行为键（值 `{ "action": "ask" | "tray" | "exit" }`；值校验在
+/// 前端 zod，Rust 只认键名做三分派宽松归档）
+pub const CLOSE_BEHAVIOR_KEY: &str = "closeBehavior";
+
 /// settings 内存缓存。启动灌入全量，此后与写操作保持同步。
 /// 锁中毒仅可能发生在持锁写入 panic 时；HashMap 不因中毒而损坏，
 /// 取回内部数据继续使用即可（不让 panic 沿锁扩散成不可恢复状态）。
@@ -38,6 +45,12 @@ impl SettingsCache {
     /// 快照直出（`get_boot_settings` 载荷）
     pub fn snapshot(&self) -> HashMap<String, Value> {
         self.lock_read().clone()
+    }
+
+    /// 单键读取（决策层 / 托盘菜单的轻量读取面：避免为单键拷贝全表；
+    /// 锁口径与 snapshot 一致）
+    pub fn get(&self, key: &str) -> Option<Value> {
+        self.lock_read().get(key).cloned()
     }
 
     pub fn contains(&self, key: &str) -> bool {
@@ -66,7 +79,7 @@ impl SettingsCache {
 /// 工作台三键：当前工作空间、命令键位覆盖表（JSON 仅存覆盖项）、左栏宽度持久化
 const EXACT_KEYS: &[&str] = &[
     "theme",
-    "locale",
+    LOCALE_KEY,
     "devMode",
     "logLevel",
     "logDir",
@@ -81,6 +94,9 @@ const EXACT_KEYS: &[&str] = &[
     // 状态栏固定工作流（每工作空间至多一个，workspaceId → workflowId 映射；
     // UI 偏好无副作用，落库即终态）
     "workflowPins",
+    // 关闭按钮行为（主窗口点 X / Alt+F4 的三分派决策键；Rust 侧无生效
+    // 旁路——决策发生在 CloseRequested 现场读缓存，见 lib.rs 决策层）
+    CLOSE_BEHAVIOR_KEY,
 ];
 
 /// 预留组前缀：`http.*`（写权限先放行，具体键语义由后续阶段定义）。
@@ -730,5 +746,32 @@ mod tests {
         let snapshot = HashMap::from([("devMode".to_owned(), json!("bogus"))]);
         assert!(!devtools_initial(&snapshot));
         assert!(!devtools_initial(&HashMap::new()));
+    }
+
+    // —— closeBehavior 键（关窗决策层数据面）——
+
+    #[tokio::test]
+    async fn close_behavior_key_is_writable_and_single_key_readable() {
+        let pool = memory_pool().await;
+        let cache = SettingsCache::default();
+        let host = RecordingHost::default();
+        // 白名单放行（未注册前该键写入会被 SETTINGS_UNKNOWN_KEY 拒绝）
+        set(
+            &host,
+            &pool,
+            &cache,
+            CLOSE_BEHAVIOR_KEY,
+            json!({"action": "tray"}),
+        )
+        .await
+        .unwrap();
+        // 单键 get 直读缓存（决策层现场读取面），缺失键返回 None
+        assert_eq!(
+            cache.get(CLOSE_BEHAVIOR_KEY).unwrap(),
+            json!({"action": "tray"})
+        );
+        assert_eq!(cache.get("no.such.key"), None);
+        // 无副作用键：落库即终态，不触发生效动作
+        assert!(host.log_levels().is_empty() && host.http_values().is_empty());
     }
 }

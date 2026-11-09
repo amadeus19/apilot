@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 
 import { reportError } from '@/services/error-center'
-import { checkUpdates, downloadUpdate, installUpdate } from '@/services/ipc'
+import { flushAllForExit } from '@/services/exit-flush'
+import { checkUpdates, downloadUpdate, installUpdate, invoke } from '@/services/ipc'
 import { presentCheckToast, presentDownloadVerified } from '@/services/update-check'
 import { useUpdatePromptStore } from '@/stores/update-prompt.store'
 
@@ -10,8 +11,9 @@ import { useUpdatePromptStore } from '@/stores/update-prompt.store'
  * 由此独占持有，设置面板更新段与就绪对话框为纯视图（订阅本状态渲染）。
  *
  * 流程：检查（全状态 toast 反馈）→ 发现新版可下载 → 下载校验（toast 反馈）
- * → 就绪确认对话框（update-prompt store 承载请求）→ 确认安装（Rust 侧触发
- * 关窗，退出序列末尾 spawn 安装器，安装结果由下轮 boot 扫场反馈）。
+ * → 就绪确认对话框（update-prompt store 承载请求）→ 确认安装（Rust 暂存
+ * 安装请求并 arm 退出闸门 → 前端全量收尾后 ack 放行 → 退出序列末尾 spawn
+ * 安装器，安装结果由下轮 boot 扫场反馈）。
  *
  * 任务归属（豁免记录）：检查 / 下载是秒级单次动作（Rust 侧超时兜底，5s/50s），
  * 生命周期随请求结束，无取消语义需求，不进 TaskRegistry；安装器 spawn 在
@@ -31,7 +33,7 @@ interface UpdateFlowState {
   checkUpdates: () => Promise<void>
   /** 下载校验就绪包，通过后请求就绪确认对话框 */
   downloadAndInstall: () => Promise<void>
-  /** 确认安装就绪包：Rust 校验通过即触发关窗，成功路径窗口即将关闭 */
+  /** 确认安装就绪包：Rust 校验通过即暂存安装请求，前端收尾 ack 后进入退出序列（成功路径进程即将退出） */
   confirmInstall: () => Promise<void>
 }
 
@@ -80,12 +82,18 @@ export const useUpdateFlow = create<UpdateFlowState>((set, get) => ({
     if (!pending) return
     set({ installing: true })
     try {
-      // 成功即由 Rust 侧触发关窗走统一 shutdown（无盲等定时器）；
-      // installing 保持，窗口关闭前对话框维持锁定态
       await installUpdate(pending.version)
     } catch (error) {
       reportError(error)
       set({ installing: false })
+      return
     }
+    // Rust 已暂存安装请求并 arm 退出闸门。装更新旁路关窗决策层、不触发
+    // CloseRequested，onCloseRequested 收尾通道不会运行——由此处全量收尾
+    // （会话保存 + 草稿 flush，逐项容错）后 ack 放行，退出序列立即进入，
+    // 不干等闸门超时。ack 失败只上报：退出已成定局（闸门超时兜底放行），
+    // installing 保持锁定直至进程退出
+    await flushAllForExit()
+    await invoke<void>('app.ready_to_exit').catch((error: unknown) => reportError(error))
   },
 }))

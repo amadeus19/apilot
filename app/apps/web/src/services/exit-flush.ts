@@ -1,8 +1,11 @@
 import * as React from 'react'
 
+import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 
 import { invoke } from './ipc'
+import { useCloseConfirmStore } from '@/stores/close-confirm.store'
+import { useSettingsStore } from '@/stores/settings.store'
 
 /**
  * 退出收尾注册表：CloseRequested 后、放行退出前依次执行的 flush 动作。
@@ -39,17 +42,29 @@ export async function flushAllForExit(): Promise<void> {
 }
 
 /**
- * 退出收尾监听（App 根挂载单点）：CloseRequested → 拦截默认关闭 →
- * 全量 flush → `app.ready_to_exit` 放行（Rust 侧闸门，超时兜底）。
+ * 退出收尾监听（App 根挂载单点），双监听并存（Tauri 的 CloseRequested 会同时
+ * 派发给 Rust handler 与 JS 监听者，Rust 分支决定各自该做什么）：
+ *
+ * - `onCloseRequested`：一律拦截默认关闭（决策权在 Rust）。仅 exit 分支闸门
+ *   （Rust 已 arm）需要 flush 后 `app.ready_to_exit` ack；ask / tray 分支闸门
+ *   未 arm，ack 无意义——ask 等弹窗决策、tray 窗口已被 Rust 隐藏。ask 弹窗
+ *   等待决策期间（close-confirm pending）再次触发则短路返回，不重复收尾。
+ * - `app://close-requested`（仅 ask 分支由 Rust 发出，语义＝询问用户）：只弹
+ *   确认弹窗，不 flush 不 ack——该分支闸门未 arm，放行走用户决策后的
+ *   `app.confirm_exit`（含 flush）。
  */
 export function useExitFlush(): void {
   React.useEffect(() => {
     let disposed = false
-    let unlisten: (() => void) | null = null
+    const unlisteners: Array<() => void> = []
     void getCurrentWindow()
       .onCloseRequested((event) => {
-        // 拦截默认关闭：Rust 侧同样接管（闸门等待本收尾完成或超时）
+        // 拦截默认关闭：分支决策与放行全在 Rust 侧
         event.preventDefault()
+        // ask 弹窗正在等用户决策：短路（不 flush 不 ack，弹窗动作负责收尾）
+        if (useCloseConfirmStore.getState().pending) return
+        // 仅 exit 分支闸门在等 ack；ask / tray 分支闸门未 arm，不做收尾放行
+        if (useSettingsStore.getState().closeBehavior.action !== 'exit') return
         void (async () => {
           await flushAllForExit()
           await invoke('app.ready_to_exit')
@@ -57,11 +72,18 @@ export function useExitFlush(): void {
       })
       .then((fn) => {
         if (disposed) fn()
-        else unlisten = fn
+        else unlisteners.push(fn)
       })
+    void listen('app://close-requested', () => {
+      // ask 分支询问事件：只弹窗，不 flush 不 ack
+      useCloseConfirmStore.getState().show()
+    }).then((fn) => {
+      if (disposed) fn()
+      else unlisteners.push(fn)
+    })
     return () => {
       disposed = true
-      unlisten?.()
+      for (const unlisten of unlisteners) unlisten()
     }
   }, [])
 }

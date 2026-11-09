@@ -139,6 +139,11 @@
           "format": "email",
           "example": "alice@example.com"
         },
+        "tagList": {
+          "type": "array",
+          "description": "标签 ID 列表",
+          "items": { "type": "integer" }
+        },
         "profile": { "$ref": "#/definitions/Profile" }
       }
     },

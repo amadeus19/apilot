@@ -2,7 +2,14 @@ import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { BookOpenTextIcon, ChevronDownIcon, XIcon } from 'lucide-react'
 
-import { Button, Sheet, SheetClose, SheetContent, SheetTitle } from '@workspace/ui/components'
+import {
+  Button,
+  CopySurface,
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetTitle,
+} from '@workspace/ui/components'
 
 import { MethodBadge } from '@/features/api-tree/method-badge'
 import { useI18n } from '@/i18n'
@@ -11,15 +18,14 @@ import { workbenchKeys } from '@/services/workbench-api'
 
 import { statusCodeClass } from './constants'
 import {
-  colorizeJsonTokens,
   contentTypeLabel,
   flattenDocSchema,
   generateSample,
   groupParamsByLocation,
   isFormContentType,
   type EndpointDoc,
-  type JsonToken,
 } from './endpoint-doc-logic'
+import { JsonView } from './json-view'
 
 /**
  * 接口文档预览抽屉：渲染同步接口定义侧文档元数据（`endpoint.doc` IPC 数据源）。
@@ -35,14 +41,6 @@ import {
  * 按钮并存、抽屉互斥切换（同钮再点收起，见 [`nextExclusiveDrawerState`]）。
  */
 
-const TOKEN_CLASS: Record<JsonToken['kind'], string> = {
-  key: 'text-sky-600 dark:text-sky-400',
-  string: 'text-emerald-700 dark:text-emerald-400',
-  number: 'text-amber-700 dark:text-amber-400',
-  literal: 'text-purple-700 dark:text-purple-400',
-  punct: 'text-muted-foreground',
-}
-
 /** 参数小节标签键（path / query / header；t() 参数须字面量键，不模板拼接） */
 const DOC_LOCATION_KEYS = {
   path: 'response.docParamLocation_path',
@@ -50,17 +48,28 @@ const DOC_LOCATION_KEYS = {
   header: 'response.docParamLocation_header',
 } as const
 
-function JsonView({ value }: { value: unknown }) {
-  const text = typeof value === 'string' ? value : (JSON.stringify(value, null, 2) ?? 'null')
-  const tokens = React.useMemo(() => colorizeJsonTokens(text), [text])
+/**
+ * 参数示例值行：前缀与值拆开——值独立放行划选与悬浮复制（复制口径＝值
+ * 本体，不含前缀）；值为对象 / 数组时改走 JsonView（缩进着色整块呈现），
+ * 标量维持行内 mono。
+ */
+function ParamExampleRow({ prefix, example }: { prefix: string; example: unknown }) {
+  if (typeof example === 'object' && example !== null) {
+    return (
+      <div className="grid gap-0.5 font-mono text-micro text-muted-foreground/80">
+        <span>{prefix}</span>
+        <JsonView value={example} />
+      </div>
+    )
+  }
+  const text = typeof example === 'string' ? example : JSON.stringify(example)
   return (
-    <pre className="overflow-x-auto rounded-md border border-border bg-muted/40 p-2 font-mono text-xs leading-5 whitespace-pre">
-      {tokens.map((token, index) => (
-        <span key={index} className={TOKEN_CLASS[token.kind]}>
-          {token.text}
-        </span>
-      ))}
-    </pre>
+    <div className="flex items-baseline font-mono text-micro text-muted-foreground/80">
+      <span>{prefix}</span>
+      <CopySurface getText={() => text} className="min-w-0">
+        <span className="break-all">{text}</span>
+      </CopySurface>
+    </div>
   )
 }
 
@@ -233,12 +242,10 @@ export function EndpointDocDrawer({
                                 </span>
                               )}
                               {param.example !== undefined && (
-                                <span className="font-mono text-micro text-muted-foreground/80">
-                                  {t('response.docExamplePrefix')}
-                                  {typeof param.example === 'string'
-                                    ? param.example
-                                    : JSON.stringify(param.example)}
-                                </span>
+                                <ParamExampleRow
+                                  prefix={t('response.docExamplePrefix')}
+                                  example={param.example}
+                                />
                               )}
                             </div>
                           ))}

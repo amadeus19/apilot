@@ -31,6 +31,7 @@ describe('hydrateFromBoot', () => {
           theme: { preference: 'dark', accent: 'rose' },
           locale: { preference: 'en' },
           devMode: { enabled: true },
+          closeBehavior: { action: 'tray' },
         },
         systemLocale: 'en-US',
       },
@@ -40,6 +41,7 @@ describe('hydrateFromBoot', () => {
     expect(state.theme).toEqual({ preference: 'dark', accent: 'rose' })
     expect(state.locale).toEqual({ preference: 'en' })
     expect(state.devMode.enabled).toBe(true)
+    expect(state.closeBehavior).toEqual({ action: 'tray' })
     expect(state.systemTheme).toBe('dark')
     expect(state.systemLocale).toBe('en-US')
   })
@@ -93,6 +95,16 @@ describe('偏好动作（即时生效 + fire-and-forget 落库）', () => {
     // 异步落库失败 → 上报（微任务排空后断言）
     await vi.waitFor(() => expect(toast.error).toHaveBeenCalledOnce())
     expect(useSettingsStore.getState().theme.preference).toBe('dark')
+  })
+
+  it('setCloseBehavior 更新本地并写穿 closeBehavior 键（弹窗记住选择与设置面板共用）', () => {
+    useSettingsStore.getState().setCloseBehavior('tray')
+    expect(useSettingsStore.getState().closeBehavior).toEqual({ action: 'tray' })
+    expect(setSettingMock).toHaveBeenCalledWith('closeBehavior', { action: 'tray' })
+
+    useSettingsStore.getState().setCloseBehavior('exit')
+    expect(useSettingsStore.getState().closeBehavior).toEqual({ action: 'exit' })
+    expect(setSettingMock).toHaveBeenLastCalledWith('closeBehavior', { action: 'exit' })
   })
 
   it('setWorkflowPin 写穿映射键，null 取消固定且其余空间固定保留', () => {

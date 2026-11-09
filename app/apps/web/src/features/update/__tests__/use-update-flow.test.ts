@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useUpdateFlow } from '../use-update-flow'
 import { toast } from '@workspace/ui/components'
+import { registerExitFlusher } from '@/services/exit-flush'
 import { useUpdatePromptStore } from '@/stores/update-prompt.store'
 
 // 流程状态机测试：IPC 命令替身 + toast 替身；就绪对话框请求通道（prompt
@@ -84,25 +85,58 @@ describe('useUpdateFlow（更新流程单一事实源）', () => {
     expect(useUpdateFlow.getState().installing).toBe(false)
   })
 
-  it('confirmInstall：以暂存包版本号启动安装（Rust 通过后接管关窗）', async () => {
+  it('confirmInstall：暂存安装请求后全量收尾再 ack 放行退出（不干等闸门超时）', async () => {
     useUpdatePromptStore.getState().show({ version: '0.1.6' })
-    invokeMock.mockResolvedValue(undefined)
-    await useUpdateFlow.getState().confirmInstall()
+    // 命令与收尾按发生顺序记入同一时间线：收尾必须夹在暂存与 ack 之间
+    const timeline: string[] = []
+    invokeMock.mockImplementation(async (cmd: string) => {
+      timeline.push(cmd)
+    })
+    const unregister = registerExitFlusher('update-flow-test', () => {
+      timeline.push('flush')
+    })
+    try {
+      await useUpdateFlow.getState().confirmInstall()
+    } finally {
+      unregister()
+    }
     expect(invokeMock).toHaveBeenCalledWith('install_update', { version: '0.1.6' })
-    // 成功路径窗口即将关闭：installing 保持锁定（无盲等定时器）
+    expect(timeline).toEqual(['install_update', 'flush', 'app.ready_to_exit'])
+    // 成功路径进程即将退出：installing 保持锁定（无盲等定时器）
     expect(useUpdateFlow.getState().installing).toBe(true)
   })
 
-  it('confirmInstall 失败：上报并恢复可重试', async () => {
+  it('confirmInstall：ack 失败只上报，安装锁定保持（闸门超时兜底放行）', async () => {
+    useUpdatePromptStore.getState().show({ version: '0.1.6' })
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'app.ready_to_exit') {
+        throw { kind: 'apilot_error', code: 'INTERNAL', message: 'ack failed' }
+      }
+    })
+    await useUpdateFlow.getState().confirmInstall()
+    expect(toast.error).toHaveBeenCalled()
+    expect(useUpdateFlow.getState().installing).toBe(true)
+  })
+
+  it('confirmInstall 失败：上报并恢复可重试，不收尾不 ack', async () => {
     useUpdatePromptStore.getState().show({ version: '0.1.6' })
     invokeMock.mockRejectedValue({
       kind: 'apilot_error',
       code: 'UPDATE_INSTALL_FAILED',
       message: 'staged installer missing',
     })
-    await useUpdateFlow.getState().confirmInstall()
+    const flusher = vi.fn()
+    const unregister = registerExitFlusher('update-flow-test', flusher)
+    try {
+      await useUpdateFlow.getState().confirmInstall()
+    } finally {
+      unregister()
+    }
     expect(toast.error).toHaveBeenCalled()
     expect(useUpdateFlow.getState().installing).toBe(false)
+    // 安装请求未暂存、闸门未 arm：不收尾、不 ack
+    expect(flusher).not.toHaveBeenCalled()
+    expect(invokeMock).not.toHaveBeenCalledWith('app.ready_to_exit')
   })
 
   it('confirmInstall 无就绪包请求时不动作（纯视图依赖请求通道）', async () => {

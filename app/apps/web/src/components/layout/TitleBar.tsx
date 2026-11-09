@@ -1,10 +1,4 @@
-import {
-  Button,
-  Separator,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@workspace/ui/components'
+import { Button, Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components'
 import * as React from 'react'
 import {
   CopyIcon,
@@ -64,8 +58,10 @@ function WindowControls() {
     }
   }, [win])
 
+  // 图标色继承标题栏前景色（与左侧功能钮同色）；字形取 size-3.5，比功能钮
+  // 小一档，贴近 Windows 原生标题栏按钮的小字形惯例
   const controlClass =
-    'grid h-full w-11 place-items-center text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset'
+    'grid h-full w-11 place-items-center outline-none transition-colors hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset'
   return (
     <div className="flex items-stretch self-stretch" data-tauri-drag-region="false">
       <button
@@ -74,7 +70,7 @@ function WindowControls() {
         className={controlClass}
         onClick={() => void win.minimize()}
       >
-        <MinusIcon className="size-4" />
+        <MinusIcon className="size-3.5" />
       </button>
       <button
         type="button"
@@ -82,7 +78,7 @@ function WindowControls() {
         className={controlClass}
         onClick={() => void win.toggleMaximize()}
       >
-        {maximized ? <CopyIcon className="size-4" /> : <SquareIcon className="size-4" />}
+        {maximized ? <CopyIcon className="size-3.5" /> : <SquareIcon className="size-3.5" />}
       </button>
       <button
         type="button"
@@ -90,7 +86,7 @@ function WindowControls() {
         className={cn(controlClass, 'hover:bg-destructive hover:text-destructive-foreground')}
         onClick={() => void win.close()}
       >
-        <XIcon className="size-4" />
+        <XIcon className="size-3.5" />
       </button>
     </div>
   )
@@ -212,7 +208,6 @@ export function TitleBar() {
           <TooltipContent>{t('shell.settingsButton')}</TooltipContent>
         </Tooltip>
 
-        <Separator orientation="vertical" className="mx-1.5 h-5 self-center" />
         <WindowControls />
       </div>
     </header>

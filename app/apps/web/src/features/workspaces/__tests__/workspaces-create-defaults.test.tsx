@@ -39,7 +39,7 @@ describe('新建工作空间：创建预置默认值', () => {
       expect(invokeMock).toHaveBeenCalledWith('workspace.create', {
         name: '预置空间',
         baseUrl: 'http://127.0.0.1:5000',
-        auth: '{"type":"bearer","token":"{{access_token}}"}',
+        auth: '{"type":"bearer","token":"{{access-token}}"}',
       })
     })
   })

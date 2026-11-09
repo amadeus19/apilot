@@ -1,8 +1,10 @@
 import { fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useWorkflowExecutionStore } from '../execution.store'
+import { useWorkflowEditorStore } from '../workflow-editor.store'
 import { WorkflowIdContext } from '../canvas/workflow-id-context'
 import { InvalidRefContext } from '../canvas/validation-context'
 import {
@@ -11,7 +13,7 @@ import {
   type RenameRequest,
 } from '../canvas/node-editing-context'
 import { WorkflowNodeCard } from '../canvas/node-card'
-import type { WorkflowNode } from '../workflow-model'
+import { GRAPH_SCHEMA_VERSION, type WorkflowNode } from '../workflow-model'
 
 // Handle 依赖画布节点注册上下文，组件测试只看请求节点的引用态视觉面，
 // 置空渲染（拓扑正确性属画布集成面）
@@ -326,6 +328,60 @@ describe('node-card：请求节点内联配置面（Postman Flow 式）', () => 
       'n1',
       expect.objectContaining({ config: expect.objectContaining({ timeoutMs: 500 }) }),
     )
+  })
+})
+
+describe('node-card：节点内输入与键入同拍（会话图优先于滞后的 data.node）', () => {
+  // React Flow 受控 nodes 灌入自定义节点是滞后的：此处 data 恒为初始节点
+  // （模拟新值未到），更新通道只同步写会话图——中间插入后值与光标须跟随键入
+  afterEach(() => {
+    useWorkflowEditorStore.setState({ sessions: {} })
+  })
+
+  it('Body 覆写中间插入：光标停在插入点之后，值按键入落定', async () => {
+    const user = userEvent.setup()
+    const base: WorkflowNode = {
+      id: 'n1',
+      name: '',
+      position: { x: 0, y: 0 },
+      config: {
+        type: 'request',
+        endpointKey: null,
+        query: [],
+        pathParams: [],
+        body: '{}',
+        timeoutMs: null,
+      },
+    }
+    useWorkflowEditorStore.setState({
+      sessions: {
+        wf1: {
+          workflowId: 'wf1',
+          name: 'W',
+          graph: { schemaVersion: GRAPH_SCHEMA_VERSION, nodes: [base], edges: [] },
+          dirty: false,
+          past: [],
+          future: [],
+          lastCommit: null,
+        },
+      },
+    })
+    const commitToSession = (_nodeId: string, next: WorkflowNode) => {
+      const store = useWorkflowEditorStore.getState()
+      const graph = store.sessions.wf1?.graph
+      if (graph == null) return
+      store.commitGraph('wf1', { ...graph, nodes: [next] }, 'config:n1', true)
+    }
+    renderCard(base, { onUpdateNode: commitToSession })
+    const body = screen.getByPlaceholderText<HTMLTextAreaElement>('请求体原文，留空跟随接口')
+
+    await user.type(body, 't', { initialSelectionStart: 1, initialSelectionEnd: 1 })
+    expect(body).toHaveValue('{t}')
+    expect(body.selectionStart).toBe(2)
+
+    await user.keyboard('oken')
+    expect(body).toHaveValue('{token}')
+    expect(body.selectionStart).toBe(6)
   })
 })
 

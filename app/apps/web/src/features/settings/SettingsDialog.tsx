@@ -21,9 +21,11 @@ import {
 import { cn } from 'cn'
 
 import { useI18n } from '@/i18n'
+import { SEMANTIC_ICONS } from '@/features/icons/semantic-icons'
 import { useAppStore } from '@/stores/app.store'
 import { useSettingsStore } from '@/stores/settings.store'
 import { SETTINGS_NAVS, type SettingsNav } from './navigation'
+import { GeneralSection } from './sections/GeneralSection'
 import { AppearanceSection } from './sections/AppearanceSection'
 import { LanguageSection } from './sections/LanguageSection'
 import { KeybindingsSection } from './sections/KeybindingsSection'
@@ -39,6 +41,8 @@ import { AboutSection } from './sections/AboutSection'
  */
 
 const SECTION_ICONS: Record<SettingsNav['icon'], React.ComponentType<{ className?: string }>> = {
+  // 通用组与「应用设置」同语义，图标从语义单一常量源取（一个语义一个图标）
+  settings: SEMANTIC_ICONS.settings,
   palette: PaletteIcon,
   languages: LanguagesIcon,
   keyboard: KeyboardIcon,
@@ -50,6 +54,8 @@ const SECTION_ICONS: Record<SettingsNav['icon'], React.ComponentType<{ className
 
 function SectionBody({ id }: { id: SettingsNav['id'] }) {
   switch (id) {
+    case 'general':
+      return <GeneralSection />
     case 'appearance':
       return <AppearanceSection />
     case 'language':

@@ -1,4 +1,4 @@
-# APilot 发版流水线：push 标签 v* 触发 → Windows 双架构构建（NSIS + MSI + updater 签名产物）
+# APilot 发版流水线：push 标签 v* 触发 → Windows 双架构构建（NSIS + updater 签名产物）
 # → 汇集生成自研 manifest.json → 创建 Draft GitHub Release 并挂载全部资产。
 # 人工核对 draft 资产清单后转正式发布，releases/latest/download/manifest.json 稳定直链才生效
 # （draft 阶段资产直链不可用，云端更新源验收须安排在转正式之后）。
@@ -9,7 +9,6 @@
 #
 # 产物命名（tauri-bundler 实际模板，v2.12.0 源码）：
 #   NSIS  APilot_<版本>_{x64|arm64}-setup.exe（+ 同名 .sig，进 manifest，更新通道）
-#   MSI   APilot_<版本>_{x64|arm64}_en-US.msi（仅手动下载通道，不进 manifest）
 
 name: Release
 
@@ -43,7 +42,7 @@ jobs:
       matrix:
         # ARM64 选型：windows-11-arm 公共托管 runner（2025-04 起对公共仓库免费，现已 GA，
         # 镜像由 GitHub 官方维护）。原生 aarch64 工具链编译，产物路径与 x64 相同
-        # （target/release/bundle），收集逻辑两架构统一；NSIS/WiX 工具链由 tauri bundler
+        # （target/release/bundle），收集逻辑两架构统一；NSIS 工具链由 tauri bundler
         # 自动下载 x64 版并经 Windows 11 x64 仿真运行（官方文档确认该形态可用）。
         # 备选降级案：windows-latest 上给构建命令追加 --target aarch64-pc-windows-msvc
         # 交叉编译——产物路径变为 target/<triple>/release/bundle，收集步骤、rust-cache
@@ -58,7 +57,7 @@ jobs:
 
     steps:
       - name: 检出源码（tag 或手动指定的 ref）
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.tag || github.ref }}
 
@@ -66,12 +65,12 @@ jobs:
       # packageManager 字段（pnpm@10.13.1）保持同步；必须先于 setup-node
       # （cache: pnpm 依赖 pnpm 可执行文件已就位）
       - name: 安装 pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 10.13.1
 
       - name: 安装 Node.js（pnpm store 缓存挂锁文件哈希）
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm
@@ -124,7 +123,7 @@ jobs:
       # 签名 env 与 --config 覆盖正交组合（前者管密钥、后者管配置合并）；
       # 未注入私钥时 createUpdaterArtifacts 构建在签名阶段直接失败，构成硬前置。
       # --config 相对路径以执行目录 app/apps/web 解析，与本地发包流程同一份覆盖文件
-      - name: 构建（NSIS + MSI + updater 签名产物）
+      - name: 构建（NSIS + updater 签名产物）
         shell: bash
         working-directory: app/apps/web
         env:
@@ -133,8 +132,7 @@ jobs:
         run: pnpm tauri build --config ../../scripts/updater-build-override.json
 
       # NSIS 更新包 + .sig 是更新通道核心资产，缺失即失败（glob 不展开时 cp 报错退出）；
-      # MSI 仅手动下载通道，宽松收集——ARM64 MSI 若遇 bundler 坑，按定案口径降级为
-      # 仅 NSIS，不阻塞流水线。架构段宽匹配：bundler 对 AArch64 实际输出 "arm64"。
+      # 架构段宽匹配：bundler 对 AArch64 实际输出 "arm64"。
       - name: 收集安装包
         shell: bash
         working-directory: app
@@ -145,13 +143,10 @@ jobs:
           # 不在 src-tauri 子目录
           bundle="target/release/bundle"
           cp "$bundle"/nsis/APilot_*-setup.exe "$bundle"/nsis/APilot_*-setup.exe.sig dist/
-          if ! cp "$bundle"/msi/APilot_*_en-US.msi dist/ 2>/dev/null; then
-            echo "::warning::本架构 MSI 未产出（仅影响手动下载通道，NSIS 更新通道不受影响）"
-          fi
           ls -l dist/
 
       - name: 上传构建产物（按架构命名）
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: installers-${{ matrix.arch }}
           path: app/dist/*
@@ -165,12 +160,12 @@ jobs:
     needs: build
     steps:
       - name: 检出源码（manifest 生成脚本与版本事实源）
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: 下载双架构构建产物
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: installers
           merge-multiple: true
@@ -221,5 +216,4 @@ jobs:
           files: |
             installers/*-setup.exe
             installers/*-setup.exe.sig
-            installers/*.msi
             app/dist-update/manifest.json

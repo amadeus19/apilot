@@ -412,7 +412,7 @@ mod tests {
     async fn create_persists_base_url_and_auth_defaults() {
         let (pool, cache) = fresh_state().await;
         ensure_default(&pool).await.unwrap();
-        let auth = r#"{"type":"bearer","token":"{{access_token}}"}"#;
+        let auth = r#"{"type":"bearer","token":"{{access-token}}"}"#;
         let created = create(
             &pool,
             &cache,

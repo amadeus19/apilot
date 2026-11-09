@@ -11,6 +11,8 @@ export const ACCENTS = ['indigo', 'teal', 'violet', 'orange', 'rose', 'graphite'
 export const LOCALES = ['system', 'zh-CN', 'en'] as const
 export const LOG_LEVELS = ['error', 'warn', 'info', 'debug'] as const
 export const UPDATE_SOURCE_KINDS = ['folder', 'cloud'] as const
+/** 主窗口关闭按钮行为三态：ask＝弹窗询问（默认）/ tray＝最小化到托盘 / exit＝退出应用 */
+export const CLOSE_BEHAVIOR_ACTIONS = ['ask', 'tray', 'exit'] as const
 /** 存量配置的类型枚举（folder/cloud 两分前的 local/network/cloud 三分），
  * 仅作旧库 `type` 字段的兼容解析输入，不再对外写入 */
 const UPDATE_SOURCE_LEGACY_TYPES = ['cloud', 'local', 'network'] as const
@@ -25,6 +27,7 @@ export type AccentName = (typeof ACCENTS)[number]
 export type LocalePreference = (typeof LOCALES)[number]
 export type LogLevel = (typeof LOG_LEVELS)[number]
 export type UpdateSourceKind = (typeof UPDATE_SOURCE_KINDS)[number]
+export type CloseBehaviorAction = (typeof CLOSE_BEHAVIOR_ACTIONS)[number]
 export type HttpTimeoutStep = (typeof HTTP_TIMEOUT_STEPS)[number]
 export type HttpProxyMode = (typeof HTTP_PROXY_MODES)[number]
 export type ResolvedTheme = Exclude<ThemePreference, 'system'>
@@ -51,6 +54,8 @@ export type UpdateSourceSetting = {
 }
 /** settings 键 `autoCheckUpdates`：boot 后自动检查更新开关（关 = 仅手动检查） */
 export type AutoCheckUpdatesSetting = { enabled: boolean }
+/** settings 键 `closeBehavior`：主窗口关闭按钮行为（弹窗询问的记住动作也落此键） */
+export type CloseBehaviorSetting = { action: CloseBehaviorAction }
 /** settings 键 `shell.leftPanelWidth`：左栏宽度持久化（px；null = 未定制） */
 export type ShellLeftPanelWidthSetting = { width: number | null }
 /** settings 键 `keybindings`：命令键位覆盖表（仅存覆盖项；null = 显式清空） */
@@ -110,6 +115,10 @@ const autoCheckUpdatesSettingSchema: z.ZodType<Partial<AutoCheckUpdatesSetting>>
   enabled: z.boolean().optional(),
 })
 
+const closeBehaviorSettingSchema: z.ZodType<Partial<CloseBehaviorSetting>> = z.object({
+  action: z.enum(CLOSE_BEHAVIOR_ACTIONS).optional(),
+})
+
 const shellLeftPanelWidthSettingSchema: z.ZodType<Partial<ShellLeftPanelWidthSetting>> = z.object({
   width: z.number().int().min(0).max(8192).nullable().optional(),
 })
@@ -149,6 +158,7 @@ export const SETTINGS_DEFAULTS = {
   logDir: { path: null },
   updateSource: { kind: 'folder', path: null, baseUrl: null, mirrorPrefix: '' },
   autoCheckUpdates: { enabled: true },
+  closeBehavior: { action: 'ask' },
   shell: { width: null },
   keybindings: {},
   workflowPins: {},
@@ -168,6 +178,7 @@ export type ParsedSettings = {
   logDir: LogDirSetting
   updateSource: UpdateSourceSetting
   autoCheckUpdates: AutoCheckUpdatesSetting
+  closeBehavior: CloseBehaviorSetting
   shell: ShellLeftPanelWidthSetting
   keybindings: KeybindingsOverrides
   workflowPins: WorkflowPinsSetting
@@ -277,6 +288,13 @@ export function parseSettings(raw: Record<string, unknown> | null | undefined): 
       raw.autoCheckUpdates,
       'autoCheckUpdates',
       SETTINGS_DEFAULTS.autoCheckUpdates,
+      invalidKeys,
+    ),
+    closeBehavior: parseOne(
+      closeBehaviorSettingSchema,
+      raw.closeBehavior,
+      'closeBehavior',
+      SETTINGS_DEFAULTS.closeBehavior,
       invalidKeys,
     ),
     shell: parseOne(

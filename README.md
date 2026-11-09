@@ -52,15 +52,15 @@ APilot keeps your API endpoints, environments, request history, and multi-step w
 
 Grab the installers from the [latest release](https://github.com/amadeus19/apilot/releases/latest):
 
-| Architecture | Recommended (NSIS) | Alternative (MSI) |
-| --- | --- | --- |
-| x64 | `APilot_<version>_x64-setup.exe` | `APilot_<version>_x64_en-US.msi` |
-| ARM64 | `APilot_<version>_arm64-setup.exe` | `APilot_<version>_arm64_en-US.msi` |
+| Architecture | Installer |
+| --- | --- |
+| x64 | `APilot_<version>_x64-setup.exe` |
+| ARM64 | `APilot_<version>_arm64-setup.exe` |
 
-- The NSIS `setup.exe` is the recommended download; the MSI is a manual-install fallback.
+- The NSIS `setup.exe` is the only installer flavor.
 - **ARM64 is experimental**: it is built and artifact-checked, but has not been verified on physical ARM64 hardware yet.
 - Installers are not code-signed, so Windows SmartScreen shows a "Windows protected your PC" warning. Click **More info** → **Run anyway** to proceed.
-- The NSIS installer is per-user: no administrator rights or UAC prompt required. The MSI installs machine-wide and expects elevation.
+- The NSIS installer is per-user: no administrator rights or UAC prompt required.
 - Requires Windows 10 or 11 with the WebView2 Runtime (preinstalled on Windows 11; the NSIS installer downloads it automatically if missing).
 
 ## Use from the command line
@@ -99,7 +99,6 @@ The frontend is a pnpm + Turbo workspace rooted at `app/`; `pnpm tauri build` bu
 
 ```text
 app/apps/web/src-tauri/target/release/bundle/nsis/
-app/apps/web/src-tauri/target/release/bundle/msi/
 ```
 
 For an ARM64 build, add the target triple:

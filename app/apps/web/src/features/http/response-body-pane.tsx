@@ -39,6 +39,7 @@ import {
   type ResponseBytes,
 } from './constants'
 import { httpReadRange, httpSaveResponse, type RunResultDto } from './http-api'
+import { tryFormatJson } from './json-format'
 import { MonacoLoading } from './monaco-loading'
 import { useResponseStore } from './response.store'
 import { ResponsePreview } from './response-preview'
@@ -85,15 +86,6 @@ type BytesState =
   | { state: 'loading'; loadedBytes: number }
   | { state: 'loaded'; bytes: ResponseBytes }
   | { state: 'failed'; message: string }
-
-/** JSON 格式化尝试：解析失败返回 null（回落原文展示） */
-function tryFormatJson(text: string): string | null {
-  try {
-    return JSON.stringify(JSON.parse(text), null, 2)
-  } catch {
-    return null
-  }
-}
 
 /** base64（仅内存档 DTO 携带）→ 原始字节 */
 function base64ToBytes(base64: string): ResponseBytes {

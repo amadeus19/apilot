@@ -95,7 +95,7 @@ export function useSetCurrentWorkspaceMutation() {
  * 同口径（serializeAuthDraft 的产物形态）。
  */
 const CREATE_DEFAULT_BASE_URL = 'http://127.0.0.1:5000'
-const CREATE_DEFAULT_AUTH = JSON.stringify({ type: 'bearer', token: '{{access_token}}' })
+const CREATE_DEFAULT_AUTH = JSON.stringify({ type: 'bearer', token: '{{access-token}}' })
 
 /**
  * 工作空间管理 mutation 组（新建 / 重命名整行 / 删除）：
