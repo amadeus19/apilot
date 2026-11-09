@@ -10,7 +10,8 @@
  *      node scripts/publish-update.mjs <更新源根目录> [--notes "更新说明"] [--required]
  *
  * 2) GitHub Release 模式（--github，CI 发版用）：不复制文件，file 写 Release 资产
- *    绝对 URL，size/sha256 对传入文件就地计算；双架构 setup.exe 与 .sig 缺一即 fail。
+ *    文件名（消费端按 baseUrl + tag 重建寻址 URL），size/sha256 对传入文件就地
+ *    计算；双架构 setup.exe 与 .sig 缺一即 fail。
  *    用法：
  *      node scripts/publish-update.mjs --github --tag <tag> --out <清单输出路径> \
  *        [--notes "更新说明"] [--required] <安装包/.sig/MSI 文件清单...>
@@ -176,19 +177,21 @@ function publishToGithubRelease() {
   }
   for (const [key, setupPath] of setups) {
     manifest.platforms[key] = {
-      file: `https://github.com/${GITHUB_REPO}/releases/download/${tagArg}/${basename(setupPath)}`,
+      // file 写资产文件名（非完整 URL）：消费端按 baseUrl + tag + file 重建
+      // 寻址 URL（镜像前缀才能生效）；file 写完整 URL 会被再拼一层寻址
+      // 前缀成畸形 URL，下载落 404
+      file: basename(setupPath),
       size: statSync(setupPath).size,
       sha256: sha256(setupPath),
       signature: readFileSync(signatures.get(key), 'utf8').trim(),
     }
   }
 
-  // —— 自校验（防手工失误）：URL 形态与资产名对应、size 一致、sha256 复核、签名非空 ——
-  const urlPrefix = `https://github.com/${GITHUB_REPO}/releases/download/${tagArg}/`
+  // —— 自校验（防手工失误）：file 与资产名一致、size 一致、sha256 复核、签名非空 ——
   for (const [key, entry] of Object.entries(manifest.platforms)) {
     const setupPath = setups.get(key)
-    if (!entry.file.startsWith(urlPrefix) || !entry.file.endsWith(`/${basename(setupPath)}`)) {
-      fail(`自校验失败：${key} 的 file URL 与 Release 资产形态不符：${entry.file}`)
+    if (entry.file !== basename(setupPath)) {
+      fail(`自校验失败：${key} 的 file 应为资产文件名，实际：${entry.file}`)
     }
     if (statSync(setupPath).size !== entry.size) fail(`自校验失败：${key} 的 size 与实际文件不一致`)
     if (sha256(setupPath) !== entry.sha256) fail(`自校验失败：${key} 的 sha256 不一致`)

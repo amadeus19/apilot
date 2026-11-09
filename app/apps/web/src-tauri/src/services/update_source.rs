@@ -710,8 +710,15 @@ fn cloud_manifest_url(base_url: &str, mirror_prefix: &str) -> String {
 
 /// cloud 资产 URL：新清单按 `tag` 不可变寻址（`releases/download/<tag>/<file>`，
 /// 消除检查与下载之间发新版的竞态）；旧清单无 tag 走 latest 兼容路径
-/// （`releases/latest/download/<file>`）。`file` 为 Release 资产文件名。
+/// （`releases/latest/download/<file>`）。`file` 为 Release 资产文件名；
+/// 历史清单曾以完整 URL 填 file——按 URL 尾段取文件名归一（直接拼接会
+/// 产出畸形寻址 URL 落 404），镜像前缀对两种形态同样生效。
 fn cloud_asset_url(base_url: &str, mirror_prefix: &str, tag: Option<&str>, file: &str) -> String {
+    let file = match file.rsplit_once('/') {
+        // 含 `/` 的输入是历史完整 URL 形态，取尾段文件名；纯文件名不含 `/`
+        Some((_, name)) if file.contains("://") => name,
+        _ => file,
+    };
     let suffix = match tag {
         Some(tag) => format!("{RELEASES_DOWNLOAD_PATH}{tag}/{file}"),
         None => format!("{RELEASES_LATEST_PATH}{file}"),
@@ -2290,6 +2297,17 @@ mod tests {
                 "pkg.exe"
             ),
             "https://p.io/https://github.com/amadeus19/apilot/releases/latest/download/pkg.exe"
+        );
+        // 资产 URL：历史清单以完整 URL 填 file——取尾段文件名归一，不再拼出
+        // 畸形寻址 URL（曾因此 404）
+        assert_eq!(
+            cloud_asset_url(
+                "https://github.com/amadeus19/apilot",
+                "",
+                Some("v12.34.56"),
+                "https://github.com/amadeus19/apilot/releases/download/v12.34.56/APilot_12.34.56_x64-setup.exe"
+            ),
+            "https://github.com/amadeus19/apilot/releases/download/v12.34.56/APilot_12.34.56_x64-setup.exe"
         );
     }
 
