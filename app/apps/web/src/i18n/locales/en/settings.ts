@@ -193,6 +193,7 @@ export const settings = {
   changelogNew: 'New',
   changelogImproved: 'Improved',
   changelogFixed: 'Fixed',
+  changelogV010Date: '2026-09',
   changelogV010Intro: 'First milestone of APilot 2.0: the new architecture foundation.',
   changelogV010Item1:
     'New Tauri 2 + React cross-platform architecture with SQLite-backed settings and the boot payload protocol',
@@ -205,4 +206,42 @@ export const settings = {
   changelogV010Item5: 'Logging: daily rolling files, ring buffer and one-click diagnostics copy',
   changelogV010Item6:
     'Task registry and unified shutdown: cancellation chains and resource cleanup guarantees',
+  // v0.9.1 entries transcribed from that release's notes (bilingual two-line intro,
+  // rendered via whitespace-pre-line)
+  changelogV091Date: '2026-11',
+  changelogV091Intro:
+    '0.9.0 发布后实测反馈的体验修复批次。\nExperience fixes from real-world feedback after v0.9.0.',
+  changelogV091Item1:
+    'Installer icon: the installer and uninstaller now show the app icon instead of the default NSIS one (on machines with an older version installed, shortcuts may still show the old icon — a Windows icon cache residue; reinstall and refresh the icon cache to restore).',
+  changelogV091Item2:
+    'Sync scaffolding types: array fields are no longer scaffolded as null; skeletons are generated from the first element (scalar arrays get [0]/[""], object arrays get a one-level object skeleton); nested objects no longer lose keys or fall back to null; POST bodies that are arrays directly now scaffold correctly; the first scaffold prefers the document\'s request-body-level example. Nulls already written and user-filled content (including dictionary forms) are preserved as-is after re-syncing.',
+  changelogV091Item3:
+    'Selectable API docs examples: request/response examples and parameter example values support text selection (including right-click copy) and a hover copy button.',
+  changelogV091Item4:
+    'History detail formatting: JSON request/response bodies render indented with syntax highlighting and are selectable for copying; truncated or non-JSON content stays verbatim.',
+  changelogV091Item5:
+    'cURL import dialog: pasting long commands no longer stretches the window; content scrolls internally once it overflows (batch variable add, variable import and extractor node batch editing fixed with the same approach).',
+  changelogV091Item6:
+    'Workflow body override cursor: editing in the middle of the text no longer jumps the cursor to the end (node names and each override input fixed as well).',
+  changelogV091Item7:
+    'Close button behavior: clicking the top-right close now offers "Minimize to tray" or "Quit app", with a "Remember my choice" option; change it later under Settings › General › Close button behavior.',
+  changelogV091Item8:
+    'System tray: a resident tray icon; left-click restores the main window, and the menu supports "Show APilot / Quit" (menu language follows the UI language setting).',
+  changelogV091Item9:
+    'Single instance: launching again no longer opens a second instance; the existing window is brought up instead.',
+  changelogV091Item10:
+    'The workspace auth (Bearer Token) default placeholder changed from {{access_token}} to {{access-token}} (affects newly created workspaces only; existing workspaces are unaffected).',
+  // v0.9.2 entries pre-written for this batch's CLI items; date is an
+  // unreleased placeholder, finalized together with the release notes
+  changelogV092Date: 'Unreleased',
+  changelogV092Intro:
+    '0.9.1 发布后聚焦 CLI 与脚本集成的功能批次。\nFeature batch focused on CLI and scripting integration after v0.9.1.',
+  changelogV092Item1:
+    'CLI body flags: apilot api run gains --body-file (reads the request body from a file, same semantics as --body) and --form / --form-file (line-level overrides for form text fields and file uploads); long bodies and multipart no longer depend on inline terminal escaping.',
+  changelogV092Item2:
+    'Agent skill PowerShell guide: the bundled Agent skill adds quoting guidance for PowerShell — inline JSON double quotes get stripped there, so request bodies should prefer a local file via --body-file, letting coding agents build correct commands in PowerShell.',
+  changelogV092Item3:
+    'CLI workspace selection: with --workspace set, endpoint lookup, base_url, variables and auth now all resolve from the selected workspace (previously only endpoint lookup used it while the send chain still assembled from the current workspace, so requests could hit the wrong target when the two differed).',
+  changelogV092Item4:
+    "CLI body content type: when --body / --body-file overrides the request body, Content-Type now inherits the endpoint's saved body type (json/xml/text/urlencoded each mapped; multipart boundaries are engine-generated); content sniffing applies only when the endpoint has no saved body (e.g. an XML endpoint's overridden body is no longer sent as plain text).",
 } as const

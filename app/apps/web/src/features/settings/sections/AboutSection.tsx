@@ -6,20 +6,70 @@ import { UpdateSection } from '@/features/update'
 
 /**
  * 关于组：更新段（版本块 / 检查更新 / 自动检查开关，见 features/update）
- * ＋许可 / 文档链接＋Changelog 静态时间线（最新版展开）。
+ * ＋许可 / 文档链接＋Changelog 静态时间线（最新在前）。
  */
 
 /** Changelog 静态数据源（静态起步）；
- * 条目文案进字典（settings.changelog*），类型徽章三色（新增=绿 / 改进=琥珀 / 修复=主色） */
+ * 条目文案进字典（settings.changelog*），类型徽章三色（新增=绿 / 改进=琥珀 / 修复=主色）。
+ * 「变更」类条目（发布说明的 Changes 节）归入 improved 徽章：行为调整而非缺陷修复 */
 type ChangelogType = 'new' | 'improved' | 'fixed'
 
-const CHANGELOG_V010: Array<{ type: ChangelogType; itemKey: DictKey }> = [
-  { type: 'new', itemKey: 'settings.changelogV010Item1' },
-  { type: 'new', itemKey: 'settings.changelogV010Item2' },
-  { type: 'new', itemKey: 'settings.changelogV010Item3' },
-  { type: 'new', itemKey: 'settings.changelogV010Item4' },
-  { type: 'new', itemKey: 'settings.changelogV010Item5' },
-  { type: 'new', itemKey: 'settings.changelogV010Item6' },
+/** 单条 changelog 条目：类型徽章＋条目文案键 */
+type ChangelogItem = { type: ChangelogType; itemKey: DictKey }
+
+/** 一个版本的卡片数据：版本号（v 前缀）＋发布徽章文案键（日期 YYYY-MM，
+ * 未发布版本为「待发布」占位键）＋导语键（0.9.1 起导语为双语两行，
+ * 换行经 whitespace-pre-line 渲染）＋条目列表 */
+type ChangelogVersion = {
+  version: string
+  dateKey: DictKey
+  introKey: DictKey
+  items: ReadonlyArray<ChangelogItem>
+}
+
+/** 各版本时间线，最新在前 */
+const CHANGELOG: ReadonlyArray<ChangelogVersion> = [
+  {
+    version: 'v0.9.2',
+    dateKey: 'settings.changelogV092Date',
+    introKey: 'settings.changelogV092Intro',
+    items: [
+      { type: 'new', itemKey: 'settings.changelogV092Item1' },
+      { type: 'new', itemKey: 'settings.changelogV092Item2' },
+      { type: 'fixed', itemKey: 'settings.changelogV092Item3' },
+      { type: 'fixed', itemKey: 'settings.changelogV092Item4' },
+    ],
+  },
+  {
+    version: 'v0.9.1',
+    dateKey: 'settings.changelogV091Date',
+    introKey: 'settings.changelogV091Intro',
+    items: [
+      { type: 'fixed', itemKey: 'settings.changelogV091Item1' },
+      { type: 'fixed', itemKey: 'settings.changelogV091Item2' },
+      { type: 'fixed', itemKey: 'settings.changelogV091Item3' },
+      { type: 'fixed', itemKey: 'settings.changelogV091Item4' },
+      { type: 'fixed', itemKey: 'settings.changelogV091Item5' },
+      { type: 'fixed', itemKey: 'settings.changelogV091Item6' },
+      { type: 'new', itemKey: 'settings.changelogV091Item7' },
+      { type: 'new', itemKey: 'settings.changelogV091Item8' },
+      { type: 'new', itemKey: 'settings.changelogV091Item9' },
+      { type: 'improved', itemKey: 'settings.changelogV091Item10' },
+    ],
+  },
+  {
+    version: 'v0.1.0',
+    dateKey: 'settings.changelogV010Date',
+    introKey: 'settings.changelogV010Intro',
+    items: [
+      { type: 'new', itemKey: 'settings.changelogV010Item1' },
+      { type: 'new', itemKey: 'settings.changelogV010Item2' },
+      { type: 'new', itemKey: 'settings.changelogV010Item3' },
+      { type: 'new', itemKey: 'settings.changelogV010Item4' },
+      { type: 'new', itemKey: 'settings.changelogV010Item5' },
+      { type: 'new', itemKey: 'settings.changelogV010Item6' },
+    ],
+  },
 ]
 
 /** 深字浅底：两主题下均以本档色作文字色（浅底为 15% 淡彩），
@@ -72,30 +122,34 @@ export function AboutSection() {
         </a>
       </div>
 
-      {/* Changelog 时间线：类型徽章 + 条目列表（最新版展开） */}
+      {/* Changelog 时间线：类型徽章 + 条目列表，最新版本在前 */}
       <h3 className="mt-6 text-sm font-medium">{t('settings.changelogTitle')}</h3>
-      <div className="mt-3 rounded-lg border border-border p-4">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-xs text-muted-foreground">v0.1.0</span>
-          <Badge variant="secondary" className="font-mono text-micro">
-            2026-09
-          </Badge>
+      {CHANGELOG.map(({ version, dateKey, introKey, items }) => (
+        <div key={version} className="mt-3 rounded-lg border border-border p-4">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-xs text-muted-foreground">{version}</span>
+            <Badge variant="secondary" className="font-mono text-micro">
+              {t(dateKey)}
+            </Badge>
+          </div>
+          <p className="mt-2 text-sm whitespace-pre-line text-foreground">{t(introKey)}</p>
+          <ul className="mt-3 space-y-1.5">
+            {items.map(({ type, itemKey }) => (
+              <li key={itemKey} className="flex items-start gap-2">
+                <Badge
+                  variant="ghost"
+                  className={cn('mt-0.5 text-micro leading-3', TYPE_BADGE_CLASS[type])}
+                >
+                  {t(TYPE_LABEL_KEY[type])}
+                </Badge>
+                <span className="min-w-0 text-xs leading-4 text-muted-foreground">
+                  {t(itemKey)}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
-        <p className="mt-2 text-sm text-foreground">{t('settings.changelogV010Intro')}</p>
-        <ul className="mt-3 space-y-1.5">
-          {CHANGELOG_V010.map(({ type, itemKey }) => (
-            <li key={itemKey} className="flex items-start gap-2">
-              <Badge
-                variant="ghost"
-                className={cn('mt-0.5 text-micro leading-3', TYPE_BADGE_CLASS[type])}
-              >
-                {t(TYPE_LABEL_KEY[type])}
-              </Badge>
-              <span className="min-w-0 text-xs leading-4 text-muted-foreground">{t(itemKey)}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
+      ))}
     </section>
   )
 }

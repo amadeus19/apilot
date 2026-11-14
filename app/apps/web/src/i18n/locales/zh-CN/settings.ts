@@ -188,6 +188,7 @@ export const settings = {
   changelogNew: '新增',
   changelogImproved: '改进',
   changelogFixed: '修复',
+  changelogV010Date: '2026-09',
   changelogV010Intro: 'APilot 2.0 首个里程碑：全新架构地基落地。',
   changelogV010Item1: 'Tauri 2 + React 全新跨平台架构，SQLite 设置持久化与启动载荷协议',
   changelogV010Item2: '应用 Shell：标题栏、左栏三视图、标签栏与状态栏骨架',
@@ -195,4 +196,39 @@ export const settings = {
   changelogV010Item4: '中英双语界面与三级缺失键兜底',
   changelogV010Item5: '日志装置：按日滚动文件、环形缓冲与诊断信息一键复制',
   changelogV010Item6: '任务登记处与统一退出序列：取消链路与资源清理保障',
+  // v0.9.1 条目抄录自该版 release 说明（导语双语两行，\n 经 whitespace-pre-line 渲染）
+  changelogV091Date: '2026-11',
+  changelogV091Intro:
+    '0.9.0 发布后实测反馈的体验修复批次。\nExperience fixes from real-world feedback after v0.9.0.',
+  changelogV091Item1:
+    '安装器图标：安装与卸载器不再显示 NSIS 默认图标，换为应用图标（已装旧版机器如快捷方式仍显示旧图，为 Windows 图标缓存残留，重装并刷新图标缓存即恢复）。',
+  changelogV091Item2:
+    '同步铺底类型识别：数组字段不再铺 null，按首元素生成骨架（标量数组铺 [0]/[""]，对象数组铺一层对象骨架）；嵌套对象不再丢键或落 null；POST 请求体直接为数组时正常生成请求体；首次铺底优先使用文档的请求体级 example。已写入的 null 与用户已填内容（含字典形态）重新同步后保持原样。',
+  changelogV091Item3:
+    '接口文档示例可划选复制：请求体/响应示例与参数示例值支持鼠标划选（含右键复制）与悬浮复制按钮。',
+  changelogV091Item4:
+    '历史详情请求/响应格式化：JSON 请求/响应体展示为缩进格式（带语法着色），可划选复制；截断或非 JSON 内容保持原文。',
+  changelogV091Item5:
+    '从 cURL 导入弹窗：粘贴长命令不再撑爆窗口，超出后内部滚动（变量批量添加、变量导入、提取节点批量编辑同口径修复）。',
+  changelogV091Item6:
+    '工作流 Body 覆写光标：在文本中间编辑时光标不再跳到末尾（同样修复节点名称与各覆写行输入）。',
+  changelogV091Item7:
+    '关闭按钮行为：点击右上角关闭时可选「最小化到托盘」或「退出应用」，可勾选「记住我的选择」；可在 设置 › 通用 › 关闭按钮行为 中修改。',
+  changelogV091Item8:
+    '系统托盘：常驻托盘图标，左键单击唤起主窗口，菜单支持「显示 APilot / 退出」（菜单语言跟随界面语言设置）。',
+  changelogV091Item9: '防双开：重复启动不再开启第二个实例，自动唤起已有窗口。',
+  changelogV091Item10:
+    '工作空间认证（Bearer Token）默认占位由 {{access_token}} 改为 {{access-token}}（仅影响新创建的工作空间；已创建的工作空间不受影响）。',
+  // v0.9.2 条目预写本批 CLI 四项；日期为待发布占位，发布时与终稿一并定版
+  changelogV092Date: '待发布',
+  changelogV092Intro:
+    '0.9.1 发布后聚焦 CLI 与脚本集成的功能批次。\nFeature batch focused on CLI and scripting integration after v0.9.1.',
+  changelogV092Item1:
+    'CLI 请求体旗标：apilot api run 新增 --body-file（从文件读取请求体，语义与 --body 一致）与 --form / --form-file（表单文本字段与文件上传的行级覆写），长请求体与 multipart 场景不再依赖终端行内转义。',
+  changelogV092Item2:
+    'Agent skill PowerShell 指引：附带的 Agent skill 补充 PowerShell 下的引号指引——内联 JSON 的双引号在 PowerShell 中会被剥离，请求体优先写入本地文件走 --body-file，编码代理在 PowerShell 中也能正确拼出命令。',
+  changelogV092Item3:
+    'CLI 工作空间指定：--workspace 指定空间时，接口定位、base_url、变量与认证全链改从指定空间取数（原先仅接口查找用指定空间，发送装配仍按当前空间，两者不同时会请求发错目标）。',
+  changelogV092Item4:
+    'CLI 请求体类型：--body / --body-file 覆写请求体时，Content-Type 自动继承接口保存的请求体类型（json/xml/text/urlencoded 各自映射，multipart 边界由引擎生成），接口未保存请求体时才按内容嗅探（如 XML 接口的覆写请求体不再被当作纯文本发送）。',
 } as const

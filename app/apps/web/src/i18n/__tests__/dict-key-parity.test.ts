@@ -25,7 +25,7 @@ const SNAPSHOT: Readonly<Record<string, readonly [count: number, hash: string]>>
   historyDetail: [22, '8b8471fe7208f397'],
   keybindings: [10, '5f169ca9f7c6937f'],
   response: [83, 'ab7312084878a8e2'],
-  settings: [169, 'ca7d11614a751398'],
+  settings: [188, '98aa0942720b2ebc'],
   shell: [47, '372be7472a286fcb'],
   statusBar: [6, '89d24b7f5affa6cb'],
   sync: [59, 'da3dd1c45b8586c0'],
@@ -280,8 +280,12 @@ const SNAPSHOT: Readonly<Record<string, readonly [count: number, hash: string]>>
  * （closeBehaviorLabel/Desc/Ask/Tray/Exit）、关闭确认弹窗五键
  * （closeConfirmTitle/Desc/Tray/Exit/Remember）共 12 键（157→169）；
  * 总键 1151→1163。
+ * 应用内 changelog 补齐（2026-11-14）：settings 域增 v0.9.1 抄录与 v0.9.2 预写
+ * 条目——三版本日期徽章键 3、v0.9.1 导语＋十条、v0.9.2 导语＋四条共 19 键
+ * （169→188）；
+ * 总键 1163→1182。
  */
-const TOTAL_KEYS = 1163
+const TOTAL_KEYS = 1182
 
 /** 与 core.ts lookup 同口径的叶子判定：string 或含 other 键的复数节点 */
 function walkKeys(node: unknown, prefix: string, out: string[]): void {
