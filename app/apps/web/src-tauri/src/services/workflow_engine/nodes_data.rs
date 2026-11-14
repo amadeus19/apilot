@@ -30,7 +30,6 @@ use crate::services::send::assembly::{
 use crate::services::send::resolve_effective_timeout;
 use crate::services::variable::writeback_to_category;
 
-
 use super::{NodeOutcome, SharedRunContext, SpawnedWorkflow, UpstreamResponse};
 
 /// 请求节点执行：稳定键解析（空间内跨服务）→ 装配（用户数据＋节点覆写）→
@@ -161,6 +160,8 @@ async fn send_for_node(
             .collect(),
         headers: Vec::new(),
         body: config.body.clone().filter(|body| !body.is_empty()),
+        // 工作流节点无表单行级覆写面（CLI 专属通道），恒空
+        form_rows: Vec::new(),
     };
 
     let composed = assembly::compose_request(AssemblyFace {
@@ -247,20 +248,19 @@ pub(super) fn upstream_request_snapshot(
     consumer_label: &str,
     source_invalid_code: &str,
 ) -> Result<UpstreamResponse, NodeOutcome> {
-    let upstream_node =
-        resolve_upstream_request(&input.graph, &node.id).map_err(|violation| {
-            let detail = match violation {
-                UpstreamRequestViolation::NoUpstream => format!(
-                    "{consumer_label} node has no upstream request node: {}",
-                    node.id
-                ),
-                UpstreamRequestViolation::NotRequest(kind) => format!(
-                    "{consumer_label} node upstream must be a request node, got {kind:?}: {}",
-                    node.id
-                ),
-            };
-            NodeOutcome::failed(source_invalid_code.to_owned(), detail)
-        })?;
+    let upstream_node = resolve_upstream_request(&input.graph, &node.id).map_err(|violation| {
+        let detail = match violation {
+            UpstreamRequestViolation::NoUpstream => format!(
+                "{consumer_label} node has no upstream request node: {}",
+                node.id
+            ),
+            UpstreamRequestViolation::NotRequest(kind) => format!(
+                "{consumer_label} node upstream must be a request node, got {kind:?}: {}",
+                node.id
+            ),
+        };
+        NodeOutcome::failed(source_invalid_code.to_owned(), detail)
+    })?;
     // 响应快照校验：按上游请求节点 id 分键取（锁内 clone，guard 不外借）
     shared_ctx
         .lock()
@@ -480,11 +480,16 @@ pub(super) async fn execute_extract_node(
 /// 点分段下钻（对象按键 / 数组按下标，与解析链深层引用同一求值语义）。
 /// 无产物命中＝None（执行前校验已拦截，引擎侧兜底 fail-fast）。
 fn writeback_product_value(products: &[ExtractProduct], product_path: &str) -> Option<String> {
-    let names: Vec<&str> = products.iter().map(|product| product.name.as_str()).collect();
+    let names: Vec<&str> = products
+        .iter()
+        .map(|product| product.name.as_str())
+        .collect();
     let (name, field) = match_writeback_source(&names, product_path)?;
     let product = products.iter().find(|product| product.name == name)?;
     match field {
-        Some(field) => crate::domain::workflow_execution::json_field_value_text(&product.value, field),
+        Some(field) => {
+            crate::domain::workflow_execution::json_field_value_text(&product.value, field)
+        }
         None => Some(product.value.clone()),
     }
 }
@@ -521,15 +526,14 @@ mod tests {
     use crate::domain::run_id::new_workflow_execution_id;
     use crate::domain::workflow::{
         AssertNodeConfig, AssertRule, ExtractRule, ExtractWriteback, GRAPH_SCHEMA_VERSION,
-        OverrideRow, Position,
-        WorkflowEdge, WorkflowGraph, WorkflowNode, WorkflowNodeConfig,
+        OverrideRow, Position, WorkflowEdge, WorkflowGraph, WorkflowNode, WorkflowNodeConfig,
     };
     use crate::domain::workflow_execution::{STATUS_FAILED, STATUS_PASSED, STATUS_SKIPPED};
     use crate::infrastructure::variable_repo;
     use crate::services::workflow_engine::{RunContext, execute};
     use crate::test_support::{
-        Fixture, chain_graph, edge, issues_of, last_record, seeded_memory_pool, node,
-        node_record, node_status, plain_client, request_node,
+        Fixture, chain_graph, edge, issues_of, last_record, node, node_record, node_status,
+        plain_client, request_node, seeded_memory_pool,
     };
     use sqlx::SqlitePool;
     use std::sync::{Arc, Mutex};
@@ -1142,11 +1146,7 @@ mod tests {
                 writeback: ExtractWriteback::default(),
             }),
         };
-        let graph = extract_direct_graph(extract_node(
-            ExtractSource::StatusCode,
-            "",
-            "status",
-        ));
+        let graph = extract_direct_graph(extract_node(ExtractSource::StatusCode, "", "status"));
         let (input, shared_ctx) = extract_direct_input(
             &pool,
             &graph,
@@ -1580,10 +1580,7 @@ mod tests {
             NodeOutcome::Passed { writebacks, .. } => {
                 assert_eq!(writebacks.len(), 1, "写回清单应有一条");
                 assert_eq!(writebacks[0].key, "token");
-                assert_eq!(
-                    writebacks[0].value, "t-second",
-                    "命中第二条产物的整值"
-                );
+                assert_eq!(writebacks[0].value, "t-second", "命中第二条产物的整值");
             }
             other => panic!("应通过，实际: {other:?}"),
         }

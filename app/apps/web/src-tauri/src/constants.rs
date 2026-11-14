@@ -123,6 +123,13 @@ pub const HTTP_PREVIEW_BYTES: usize = 64 * 1024;
 /// SSE 环形缓冲尾部容量（流式展示有界内存）
 pub const SSE_RING_BUFFER_BYTES: usize = 256 * 1024;
 
+/// CLI `--body-file` 请求体文件字节上限：文件是命令行参数之外的新输入通道
+/// （不受命令行长度限制），读入即整份进内存参与合成。现网请求发送链路无
+/// 单请求体上限（GUI 草稿的 1MB 是 body/params/headers 三列合计的保存口径，
+/// 不约束一次性发送），16 MiB 覆盖常见大报文调试（内嵌 base64、批量数组）
+/// 同时钉住内存峰值——一切缓冲有界
+pub const CLI_BODY_FILE_MAX_BYTES: usize = 16 * 1024 * 1024;
+
 // —— 同步域（拉取 / 快照，Phase 5）——
 
 /// 同步拉取 swagger 文档大小上限（超限按异常响应处理：拉全量前查

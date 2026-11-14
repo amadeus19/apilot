@@ -19,6 +19,7 @@ use crate::tasks::TaskRegistry;
 const RANGE_READ_MAX_BYTES: usize = 1024 * 1024;
 
 /// 组装编排层上下文（AppState → SendCtx 投影＝GUI 入口装配点）。
+/// GUI 恒从当前工作空间发送：不携带指定空间，装配时现取当前空间。
 fn send_ctx<'a>(state: &'a AppState) -> Result<SendCtx<'a>, AppError> {
     let db = state.db.as_ref().map_err(Clone::clone)?;
     Ok(SendCtx {
@@ -27,6 +28,7 @@ fn send_ctx<'a>(state: &'a AppState) -> Result<SendCtx<'a>, AppError> {
         http: &state.http,
         registry: &state.tasks,
         data_dir: &state.data_dir,
+        workspace_id: None,
     })
 }
 

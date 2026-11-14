@@ -65,6 +65,10 @@ pub struct SendCtx<'a> {
     pub http: &'a HttpService,
     pub registry: &'a TaskRegistry,
     pub data_dir: &'a Path,
+    /// 发送链的工作空间作用域：Some＝调用方已解析的指定空间（CLI
+    /// `--workspace`，接口定位与装配链全程取该空间）；None＝解析当前
+    /// 工作空间（GUI 与缺省 CLI 口径，装配时现取——与发送时刻一致）。
+    pub workspace_id: Option<&'a str>,
 }
 
 /// 发送入口形态。
@@ -172,16 +176,21 @@ pub fn resolve_effective_timeout(global: Option<u64>, endpoint: Option<i64>) -> 
     }
 }
 
-/// 发送前装配（普通发送链入口）：解析当前空间后以服务内键直查形态走
-/// 装配缝单点（assembly 模块；不落库的失败：查不到即拒绝）。
+/// 发送前装配（普通发送链入口）：工作空间取 ctx 携带的指定值（CLI
+/// `--workspace` 已解析空间，装配全程不感知「当前空间」隐式态）；未携带
+/// （GUI 与缺省 CLI）解析当前空间。以服务内键直查形态走装配缝单点
+/// （assembly 模块；不落库的失败：查不到即拒绝）。
 pub(crate) async fn assemble(
     ctx: &SendCtx<'_>,
     service_id: &str,
     endpoint_key: &str,
 ) -> Result<AssembledSend, AppError> {
-    let workspace_id = workspace::resolve_current_id(ctx.pool, ctx.cache)
-        .await?
-        .ok_or_else(|| AppError::new(codes::WORKSPACE_NOT_FOUND, "no workspace exists"))?;
+    let workspace_id = match ctx.workspace_id {
+        Some(id) => id.to_owned(),
+        None => workspace::resolve_current_id(ctx.pool, ctx.cache)
+            .await?
+            .ok_or_else(|| AppError::new(codes::WORKSPACE_NOT_FOUND, "no workspace exists"))?,
+    };
     assembly::assemble(
         ctx.pool,
         assembly::AssembleRequest {
@@ -1261,6 +1270,15 @@ mod tests {
                 http: &self.http,
                 registry: &self.registry,
                 data_dir: &self.data_dir,
+                workspace_id: None,
+            }
+        }
+
+        /// 指定空间作用域的 ctx（CLI `--workspace` 形态：装配链全程取该空间）。
+        fn ctx_in<'a>(&'a self, workspace_id: &'a str) -> SendCtx<'a> {
+            SendCtx {
+                workspace_id: Some(workspace_id),
+                ..self.ctx()
             }
         }
 
@@ -1525,6 +1543,7 @@ mod tests {
                 http: &fx.http,
                 registry: &fx.registry,
                 data_dir: &fx.data_dir,
+                workspace_id: None,
             };
             let send = execute_endpoint(
                 &ctx,
@@ -2540,6 +2559,152 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(blocked.status_code, Some(401));
+    }
+
+    /// 指定空间贯通装配链：ctx 携带指定空间（CLI `--workspace` 形态）时，
+    /// base_url、生效变量与工作空间级认证全部取该空间，当前空间的同名
+    /// 配置不串扰；未携带（GUI 口径）回落当前空间，行为不变。
+    #[tokio::test]
+    async fn specified_workspace_assembles_from_it_not_current() {
+        let fx = Fixture::new().await;
+        use crate::infrastructure::variable_repo::test_support as var_support;
+        // 当前空间 w1：激活变量 env=alpha / tok=ta＋工作空间级 Bearer
+        var_support::seed_category(&fx.pool, "vc1", "w1", "开发").await;
+        var_support::seed_variable(&fx.pool, "vc1", "env", "alpha", false).await;
+        var_support::seed_variable(&fx.pool, "vc1", "tok", "ta", false).await;
+        crate::services::variable::set_active_category(&fx.pool, "w1", Some("vc1"))
+            .await
+            .unwrap();
+        crate::infrastructure::workspace_repo::update_auth(
+            &fx.pool,
+            "w1",
+            Some(r#"{"type":"bearer","token":"{{tok}}"}"#),
+        )
+        .await
+        .unwrap();
+
+        // 指定空间 w2：独立靶机端口＋同名变量不同值（env=beta / tok=tb）
+        let target_b = demo_server::spawn_ephemeral().await.unwrap();
+        crate::infrastructure::workspace_repo::test_support::seed_workspace(
+            &fx.pool,
+            "w2",
+            "空间二",
+        )
+        .await;
+        crate::infrastructure::workspace_repo::update(
+            &fx.pool,
+            "w2",
+            "空间二",
+            Some(target_b.base_url().as_str()),
+        )
+        .await
+        .unwrap();
+        crate::infrastructure::workspace_repo::update_auth(
+            &fx.pool,
+            "w2",
+            Some(r#"{"type":"bearer","token":"{{tok}}"}"#),
+        )
+        .await
+        .unwrap();
+        crate::infrastructure::service_repo::test_support::seed_service(
+            &fx.pool,
+            "s2",
+            "w2",
+            "服务二",
+        )
+        .await;
+        seed_definition(
+            &fx.pool,
+            "s2",
+            "GET /healthz",
+            crate::domain::endpoint::HttpMethod::GET,
+            "/healthz",
+            "健康检查",
+        )
+        .await;
+        var_support::seed_category(&fx.pool, "vc2", "w2", "环境二").await;
+        var_support::seed_variable(&fx.pool, "vc2", "env", "beta", false).await;
+        var_support::seed_variable(&fx.pool, "vc2", "tok", "tb", false).await;
+        crate::services::variable::set_active_category(&fx.pool, "w2", Some("vc2"))
+            .await
+            .unwrap();
+
+        // 两空间接口用户数据同名行 env={{env}}：解析值即空间指纹
+        for service in ["s1", "s2"] {
+            user_data_repo::upsert(
+                &fx.pool,
+                service,
+                "GET /healthz",
+                &UserDataInput {
+                    body: None,
+                    params: r#"[{"name":"env","value":"{{env}}"}]"#.into(),
+                    headers: "[]".into(),
+                    timeout_seconds: None,
+                    auth: None,
+                    path_override: None,
+                    method_override: None,
+                },
+            )
+            .await
+            .unwrap();
+        }
+
+        // 指定空间 w2：URL 落 w2 靶机端口、变量与认证全取 w2
+        let result = execute_endpoint(
+            &fx.ctx_in("w2"),
+            SendRequest {
+                service_id: "s2".into(),
+                endpoint_key: "GET /healthz".into(),
+                entry: SendEntry::Cli,
+                overrides: SendOverrides::default(),
+                base_url_override: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.state, RunState::Passed, "请求真实到达 w2 靶机");
+        assert_eq!(
+            result.request.url,
+            format!("{}/healthz?env=beta", target_b.base_url()),
+            "base_url 与变量都取 w2"
+        );
+        assert!(
+            result
+                .request
+                .headers
+                .iter()
+                .any(|(k, v)| k == "Authorization" && v == "Bearer tb"),
+            "工作空间级认证取 w2: {:?}",
+            result.request.headers
+        );
+
+        // 未携带（GUI 口径）：回落当前空间 w1——端口、变量、认证均 w1
+        let current = execute_endpoint(
+            &fx.ctx(),
+            SendRequest {
+                service_id: "s1".into(),
+                endpoint_key: "GET /healthz".into(),
+                entry: SendEntry::Cli,
+                overrides: SendOverrides::default(),
+                base_url_override: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            current.request.url,
+            format!("{}/healthz?env=alpha", fx.target.base_url())
+        );
+        assert!(
+            current
+                .request
+                .headers
+                .iter()
+                .any(|(k, v)| k == "Authorization" && v == "Bearer ta"),
+            "当前空间口径不变: {:?}",
+            current.request.headers
+        );
+        target_b.shutdown();
     }
 
     // —— 变量解析发送链（GUI / CLI / 预览同一 Resolver 与输入源）——

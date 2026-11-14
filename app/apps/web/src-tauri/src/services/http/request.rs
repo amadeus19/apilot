@@ -126,6 +126,13 @@ pub struct SendOverrides {
     pub headers: Vec<KvRow>,
     /// 请求体整体替换（--body 原文）
     pub body: Option<String>,
+    /// 表单体行覆写（--form 文本行 / --form-file 文件行，同名整行替换＋
+    /// 后值胜，与 params / headers 行覆写同语义）。文本行 type 为 None、
+    /// 文件行 type 为 "file"（value 即文件完整路径；文件名＝basename、
+    /// mime 按扩展名推断均由引擎既有能力处理）。前提（接口保存 body 为
+    /// form 家族信封、urlencoded 不收文件行）由 CLI 命令层校验，合成层
+    /// 入口另有防御复核；GUI 不携带。
+    pub form_rows: Vec<KvRow>,
 }
 
 /// 合成输入：接口定义＋工作空间 BaseUrl＋接口级覆写＋用户数据三列＋覆写＋
@@ -378,12 +385,68 @@ fn legacy_body_kind(text: &str, has_explicit_content_type: bool) -> BodyKind {
     }
 }
 
+/// CLI 覆写 body 的合成（恒纯文本语义，覆写来源 `--body` 与 `--body-file`
+/// 同一通道）：Content-Type 取值序＝显式 `content-type` 头行（让位为空，
+/// 引擎照发用户头）＞ 接口已保存 body 信封 kind 的继承映射（覆写替换的是
+/// 内容，接口声明的类型意图延续到本次发送）＞ 嗅探回落（合法 JSON→
+/// application/json，否则 text/plain）。
+fn override_body_kind(
+    text: &str,
+    user_body: Option<&str>,
+    has_explicit_content_type: bool,
+) -> BodyKind {
+    if has_explicit_content_type {
+        return legacy_body_kind(text, true);
+    }
+    match inherited_content_type(user_body) {
+        Some(content_type) => BodyKind::Raw {
+            bytes: text.as_bytes().to_vec(),
+            content_type: content_type.to_owned(),
+        },
+        None => legacy_body_kind(text, false),
+    }
+}
+
+/// 接口已保存 body 信封 kind → 覆写发送的 Content-Type 继承映射。
+/// None＝无可继承映射（无保存 body / 纯空白 / legacy 非信封纯文本 /
+/// form-data 与 none kind）。urlencoded 有静态媒体类型可继承（接口声明
+/// 表单编码，覆写的是内容不是类型）；form-data 的 Content-Type 含引擎
+/// 动态生成的 multipart 边界，覆写纯文本也非表单体，无可继承的静态映射
+/// （表单覆写应走 --form/--form-file 行级旗标）。
+fn inherited_content_type(user_body: Option<&str>) -> Option<&'static str> {
+    let text = user_body?.trim();
+    if text.is_empty() {
+        return None;
+    }
+    match parse_body_envelope(text)?.kind {
+        BodyEnvelopeKind::Json => Some("application/json"),
+        BodyEnvelopeKind::Xml => Some("application/xml"),
+        BodyEnvelopeKind::Text => Some("text/plain"),
+        BodyEnvelopeKind::FormUrlEncoded => Some("application/x-www-form-urlencoded"),
+        BodyEnvelopeKind::FormData | BodyEnvelopeKind::None => None,
+    }
+}
+
+/// form 行覆写对信封 kind 的适用面：form-data 收文本行与文件行；
+/// urlencoded 无文件语义，携带文件行（type=="file"）即不适用；其余
+/// kind 一律不适用（表单体不存在，行级覆写无从落点）。
+fn form_rows_applicable(kind: BodyEnvelopeKind, rows: &[KvRow]) -> bool {
+    match kind {
+        BodyEnvelopeKind::FormData => true,
+        BodyEnvelopeKind::FormUrlEncoded => {
+            !rows.iter().any(|row| row.type_.as_deref() == Some("file"))
+        }
+        _ => false,
+    }
+}
+
 /// 合成（定义＋用户数据＋覆写＋变量解析 → Model＋解析记录）。Body 取值：
-/// 覆写 body 整体替换 ＞ 用户 body 列；空体为 None。CLI `--body` 覆写恒走
-/// legacy 纯文本路径（CLI 面口径：覆写值即字面文本，不解析信封——CLI 传纯
-/// 文本覆写 GUI 信封草稿时按文本语义发送）；GUI 信封草稿按 kind 合成，非信封
+/// 覆写 body 整体替换 ＞ 用户 body 列；空体为 None。CLI `--body` /
+/// `--body-file` 覆写恒走纯文本路径（CLI 面口径：覆写值即字面文本，不解析
+/// 信封——CLI 传纯文本覆写 GUI 信封草稿时按文本语义发送，Content-Type
+/// 继承序见 [`override_body_kind`]）；GUI 信封草稿按 kind 合成，非信封
 /// 旧纯文本嗅探回填、行为零变化。Content-Type 未显式设置时的默认仅服务 DX
-/// （信封按 kind、legacy 嗅探 JSON），显式头恒优先。
+/// （信封按 kind、覆写按继承序、legacy 嗅探 JSON），显式头恒优先。
 ///
 /// 变量解析位置白名单（spec「变量域」）：params·headers 的值列 / body /
 /// URL 逐段（路径模板、覆写值）；Key 列不解析；未命中原样保留。URL 次序＝
@@ -391,6 +454,30 @@ fn legacy_body_kind(text: &str, has_explicit_content_type: bool) -> BodyKind {
 /// 解析结果以 http(s):// 开头即直发、绕过 BaseUrl）；工作空间 base_url 恒
 /// 字面不解析。
 pub fn synthesize(input: &SynthesisInput<'_>) -> Result<SynthesisOutput, AppError> {
+    // form 行覆写前提复核（防御面）：前提校验在 CLI 命令层（读用户数据
+    // fail-fast），合成层入口统一复核，覆盖「校验后用户数据被并发改写」
+    // 与「调用方绕过 CLI 直传」两面——前提破裂显式拒绝（fail-fast），
+    // 不静默丢覆写行。--body 与 form 行同给在 CLI 层已互斥，此处同样
+    // 拒绝：覆写 body 整体替换语义下行级覆写无从合入
+    if !input.overrides.form_rows.is_empty() {
+        let applicable = input.overrides.body.is_none()
+            && input
+                .user_body
+                .map(str::trim)
+                .filter(|b| !b.is_empty())
+                .and_then(parse_body_envelope)
+                .is_some_and(|envelope| {
+                    form_rows_applicable(envelope.kind, &input.overrides.form_rows)
+                });
+        if !applicable {
+            return Err(AppError::new(
+                codes::HTTP_SYNTHESIS_INVALID,
+                "form row overrides require the endpoint body to be a form envelope \
+                 (form-data, or urlencoded for text rows only)",
+            ));
+        }
+    }
+
     let user_params = parse_kv_json(input.user_params, "params")?;
     let user_headers = parse_kv_json(input.user_headers, "headers")?;
     let mut params = merge_rows(user_params, &dedupe_last(&input.overrides.param_rows));
@@ -454,13 +541,19 @@ pub fn synthesize(input: &SynthesisInput<'_>) -> Result<SynthesisOutput, AppErro
         .map(str::trim)
         .filter(|b| !b.is_empty())
     {
-        // 覆写 body 整体替换（整体优先级 ＞ 用户 body 列）：恒 legacy 纯文本语义
+        // 覆写 body 整体替换（整体优先级 ＞ 用户 body 列）：恒纯文本语义；
+        // Content-Type 继承序（显式头＞信封 kind 映射＞嗅探）见 override_body_kind
         let resolved = resolve_json_body(text, input.variables);
         hits.extend(resolved.hits);
-        legacy_body_kind(&resolved.text, has_explicit_content_type)
+        override_body_kind(&resolved.text, input.user_body, has_explicit_content_type)
     } else if let Some(text) = input.user_body.map(str::trim).filter(|b| !b.is_empty()) {
         match parse_body_envelope(text) {
             Some(mut envelope) => {
+                // CLI form 行覆写合入信封行集：同名整行替换＋后值胜，行类型
+                // 随覆写行（文本覆写可把 file 行改为文本行，反之亦然）。
+                // 合入先于值列变量解析——覆写行的值与用户行走同一解析口径
+                // （前提已在入口复核，此处 kind 必为 form 家族）
+                envelope.rows = merge_rows(envelope.rows, &dedupe_last(&input.overrides.form_rows));
                 if let Some(text) = envelope.text.take() {
                     let resolved = resolve_json_body(&text, input.variables);
                     hits.extend(resolved.hits);
@@ -715,6 +808,172 @@ mod tests {
             }
             other => panic!("期望 Multipart body，得到 {other:?}"),
         }
+    }
+
+    /// CLI form 行覆写合入 form-data 信封：同名整行替换（行类型随覆写行——
+    /// 文本覆写可把 file 行改为文本行、文件覆写反之）、新名追加、覆写集内
+    /// 同名后值胜；覆写行的值列与用户行走同一变量解析口径。
+    #[test]
+    fn form_row_overrides_merge_into_form_data_envelope() {
+        let def = definition(HttpMethod::POST, "/upload");
+        let vars = vec![var("env", "prod", false)];
+        let mut overrides = SendOverrides::default();
+        overrides.form_rows = vec![
+            // 同名替换既有文本行（值含变量引用）
+            KvRow::new("note", "{{env}}-hi"),
+            // 覆写集内同名后值胜
+            KvRow::new("dup", "second"),
+            KvRow::new("dup", "first"),
+        ];
+        // 文件行覆写既有文本行（type 翻转）；跨旗标同名＝文件行胜由 CLI
+        // 解析序保证，此处直接构造文件行验证合入分流
+        overrides.form_rows.push(KvRow {
+            type_: Some("file".into()),
+            ..KvRow::new("attach", r"C:\tmp\a.png")
+        });
+        let output = synthesize(&SynthesisInput {
+            definition: &def,
+            base_url: Some("http://x.test"),
+            base_url_override: None,
+            user_body: Some(
+                r#"{"kind":"form-data","rows":[
+                    {"name":"note","value":"old"},
+                    {"name":"attach","value":"keep.png"},
+                    {"name":"dup","value":"user-value"}
+                ]}"#,
+            ),
+            user_params: "[]",
+            user_headers: "[]",
+            path_override: None,
+            method_override: None,
+            overrides: &overrides,
+            variables: &vars,
+        })
+        .unwrap();
+        match output.model.body {
+            BodyKind::Multipart(fields) => {
+                assert_eq!(
+                    fields,
+                    vec![
+                        // note：同名替换＋值列变量解析（覆写行与用户行同口径）
+                        MultipartField::Text {
+                            name: "note".into(),
+                            value: "prod-hi".into()
+                        },
+                        // attach：文本行被文件行覆写（type 翻转，路径进 File）
+                        MultipartField::File {
+                            name: "attach".into(),
+                            path: r"C:\tmp\a.png".into()
+                        },
+                        // dup：覆写集内后值胜（first 是最后一个）
+                        MultipartField::Text {
+                            name: "dup".into(),
+                            value: "first".into()
+                        },
+                    ],
+                    "同名整行替换（类型随覆写行）、后值胜、值列变量解析"
+                );
+            }
+            other => panic!("期望 Multipart body，得到 {other:?}"),
+        }
+
+        // 新名追加：覆写行名字不在信封行集时按序追加为文本行 / 文件行
+        let mut overrides = SendOverrides::default();
+        overrides.form_rows = vec![KvRow::new("extra", "v")];
+        let output = synthesize(&SynthesisInput {
+            definition: &def,
+            base_url: Some("http://x.test"),
+            base_url_override: None,
+            user_body: Some(r#"{"kind":"form-data","rows":[{"name":"f","value":"v"}]}"#),
+            user_params: "[]",
+            user_headers: "[]",
+            path_override: None,
+            method_override: None,
+            overrides: &overrides,
+            variables: &[],
+        })
+        .unwrap();
+        match output.model.body {
+            BodyKind::Multipart(fields) => assert_eq!(fields.len(), 2),
+            other => panic!("期望 Multipart body，得到 {other:?}"),
+        }
+    }
+
+    /// form 行覆写前提防御矩阵（合成层入口复核）：urlencoded 信封收文本行、
+    /// 拒文件行；json / text 信封、legacy 纯文本、无保存 body 均拒；
+    /// --body 整体替换与 form 行同给拒（覆写行无从落点，不静默丢弃）。
+    /// 拒绝码＝HTTP_SYNTHESIS_INVALID（落 failed 终态行，非 CLI 参数错误）。
+    #[test]
+    fn form_row_overrides_guard_form_family_envelope() {
+        let def = definition(HttpMethod::POST, "/a");
+        let send = |user_body: Option<&str>, overrides: &SendOverrides| {
+            synthesize(&SynthesisInput {
+                definition: &def,
+                base_url: Some("http://x.test"),
+                base_url_override: None,
+                user_body,
+                user_params: "[]",
+                user_headers: "[]",
+                path_override: None,
+                method_override: None,
+                overrides,
+                variables: &[],
+            })
+        };
+        let file_row = |name: &str, path: &str| KvRow {
+            type_: Some("file".into()),
+            ..KvRow::new(name, path)
+        };
+
+        // urlencoded＋文本行：合入成功（FormUrlEncoded 产物含覆写值）
+        let mut overrides = SendOverrides::default();
+        overrides.form_rows = vec![KvRow::new("a", "2")];
+        let model = send(
+            Some(r#"{"kind":"urlencoded","rows":[{"name":"a","value":"1"}]}"#),
+            &overrides,
+        )
+        .unwrap()
+        .model;
+        match model.body {
+            BodyKind::FormUrlEncoded(rows) => {
+                assert_eq!(serialize_urlencoded(&rows), "a=2", "文本行同名替换生效");
+            }
+            other => panic!("期望 FormUrlEncoded body，得到 {other:?}"),
+        }
+
+        // urlencoded＋文件行：拒绝（无文件语义）
+        let mut overrides = SendOverrides::default();
+        overrides.form_rows = vec![file_row("f", r"C:\tmp\a.png")];
+        let err = send(
+            Some(r#"{"kind":"urlencoded","rows":[{"name":"a","value":"1"}]}"#),
+            &overrides,
+        )
+        .unwrap_err();
+        assert_eq!(err.code, codes::HTTP_SYNTHESIS_INVALID);
+
+        // 非 form 家族信封 / legacy 纯文本 / 无保存 body：拒绝
+        for user_body in [
+            Some(r#"{"kind":"json","text":"{}"}"#),
+            Some(r#"{"kind":"text","text":"hi"}"#),
+            Some("plain legacy"),
+            None,
+        ] {
+            let mut overrides = SendOverrides::default();
+            overrides.form_rows = vec![KvRow::new("a", "1")];
+            let err = send(user_body, &overrides).unwrap_err();
+            assert_eq!(
+                err.code,
+                codes::HTTP_SYNTHESIS_INVALID,
+                "user_body={user_body:?}"
+            );
+        }
+
+        // --body 与 form 行同给：拒绝（整体替换语义下行级覆写无从合入）
+        let mut overrides = SendOverrides::default();
+        overrides.body = Some(r#"{"k":"v"}"#.into());
+        overrides.form_rows = vec![KvRow::new("a", "1")];
+        let err = send(Some(r#"{"kind":"form-data","rows":[]}"#), &overrides).unwrap_err();
+        assert_eq!(err.code, codes::HTTP_SYNTHESIS_INVALID);
     }
 
     /// 最终 URL 组合口径契约夹具（与前端 url-draft.ts 的 composeFinalUrl 测试
@@ -1044,7 +1303,114 @@ mod tests {
                     br#"{"kind":"text","text":"hi"}"#.to_vec(),
                     "覆写值按字面文本发送"
                 );
-                assert_eq!(content_type, "application/json", "合法 JSON 文本按现状嗅探");
+                // json 信封的继承映射与嗅探结果同值（此用例两口径不可分；
+                // 继承优先序由下方专项用例钉住）
+                assert_eq!(content_type, "application/json");
+            }
+            other => panic!("期望 Raw body，得到 {other:?}"),
+        }
+    }
+
+    /// CLI 覆写 body 的 Content-Type 继承序：显式 `content-type` 头行恒最优先
+    /// （让位为空）＞ 接口保存信封 kind 的映射（json/xml/text/urlencoded，
+    /// 覆写替换内容而接口声明的类型意图延续——传 JSON 文本进 xml 信封接口
+    /// 仍发 application/xml）＞ 嗅探回落（合法 JSON→application/json 否则
+    /// text/plain）。form-data 无可继承静态映射（multipart 边界由引擎动态
+    /// 生成），与无保存 body 同走嗅探。
+    #[test]
+    fn override_body_content_type_inherits_envelope_kind_before_sniffing() {
+        let def = definition(HttpMethod::POST, "/a");
+        let send = |body_override: &str, user_body: Option<&str>, headers: &str| -> BodyKind {
+            let mut overrides = SendOverrides::default();
+            overrides.body = Some(body_override.into());
+            synthesize(&SynthesisInput {
+                definition: &def,
+                base_url: Some("http://x.test"),
+                base_url_override: None,
+                user_body,
+                user_params: "[]",
+                user_headers: headers,
+                path_override: None,
+                method_override: None,
+                overrides: &overrides,
+                variables: &[],
+            })
+            .unwrap()
+            .model
+            .body
+        };
+
+        // xml 信封＋覆写 JSON 文本＋无显式头 → 继承 application/xml
+        // （不按覆写内容改判为 json）
+        match send(
+            r#"{"a":1}"#,
+            Some(r#"{"kind":"xml","text":"<root/>"}"#),
+            "[]",
+        ) {
+            BodyKind::Raw {
+                bytes,
+                content_type,
+            } => {
+                assert_eq!(bytes, br#"{"a":1}"#.to_vec(), "内容按覆写文本原样");
+                assert_eq!(content_type, "application/xml", "信封 kind 继承优先于嗅探");
+            }
+            other => panic!("期望 Raw body，得到 {other:?}"),
+        }
+        // text 信封＋覆写 JSON 文本 → 继承 text/plain
+        match send(r#"{"a":1}"#, Some(r#"{"kind":"text","text":"hi"}"#), "[]") {
+            BodyKind::Raw { content_type, .. } => assert_eq!(content_type, "text/plain"),
+            other => panic!("期望 Raw body，得到 {other:?}"),
+        }
+        // urlencoded 信封＋覆写表单编码文本 → 继承
+        // application/x-www-form-urlencoded（接口声明表单编码，覆写的是内容）
+        match send(
+            "a=1&b=2",
+            Some(r#"{"kind":"urlencoded","rows":[{"name":"a","value":"1"}]}"#),
+            "[]",
+        ) {
+            BodyKind::Raw { content_type, .. } => assert_eq!(
+                content_type,
+                "application/x-www-form-urlencoded",
+                "urlencoded 信封有静态媒体类型可继承"
+            ),
+            other => panic!("期望 Raw body，得到 {other:?}"),
+        }
+        // form-data 信封：无可继承映射（multipart 边界由引擎动态生成，覆写
+        // 纯文本非表单体）→ 嗅探回落（JSON 文本→application/json）
+        for form_body in [
+            r#"{"kind":"form-data","rows":[{"name":"f","value":"v"}]}"#,
+        ] {
+            match send(r#"{"a":1}"#, Some(form_body), "[]") {
+                BodyKind::Raw { content_type, .. } => assert_eq!(
+                    content_type, "application/json",
+                    "form 信封无映射走嗅探: user_body={form_body}"
+                ),
+                other => panic!("期望 Raw body，得到 {other:?}"),
+            }
+        }
+        // 无保存 body（None / 纯空白 / legacy 非信封纯文本）→ 嗅探回落
+        for no_body in [None, Some("   "), Some("plain legacy")] {
+            match send(r#"{"a":1}"#, no_body, "[]") {
+                BodyKind::Raw { content_type, .. } => assert_eq!(
+                    content_type, "application/json",
+                    "无可继承来源走嗅探: user_body={no_body:?}"
+                ),
+                other => panic!("期望 Raw body，得到 {other:?}"),
+            }
+        }
+        // 非 JSON 覆写文本＋无信封 → text/plain（现行嗅探口径不变）
+        match send("plain body", None, "[]") {
+            BodyKind::Raw { content_type, .. } => assert_eq!(content_type, "text/plain"),
+            other => panic!("期望 Raw body，得到 {other:?}"),
+        }
+        // 显式头恒最优先：xml 信封在场也让位为空（引擎照发用户头）
+        match send(
+            r#"{"a":1}"#,
+            Some(r#"{"kind":"xml","text":"<root/>"}"#),
+            r#"[{"name":"content-type","value":"text/csv"}]"#,
+        ) {
+            BodyKind::Raw { content_type, .. } => {
+                assert_eq!(content_type, "", "显式 content-type 头行压过信封继承")
             }
             other => panic!("期望 Raw body，得到 {other:?}"),
         }

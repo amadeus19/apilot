@@ -436,6 +436,11 @@ async fn seeded_run_dir(tag: &str, base_url: &str) -> PathBuf {
             r#"{"method":"GET","path_template":"/api/users"}"#,
         ),
         (
+            "POST /api/users",
+            "创建用户",
+            r#"{"method":"POST","path_template":"/api/users"}"#,
+        ),
+        (
             "GET /api/error/{status}",
             "错误样本",
             r#"{"method":"GET","path_template":"/api/error/{status}"}"#,
@@ -626,6 +631,343 @@ async fn api_run_usage_and_lookup_errors() {
     assert_eq!(exit_code(&out), 2);
     let value = assert_stdout_is_json_or_empty(&out).expect("错误包络在 stdout");
     assert_eq!(value["error"]["code"], "INVALID_ARGUMENT");
+}
+
+/// `--body-file` 全链路：文件 UTF-8 全文作为请求体发出（不限后缀，.md
+/// 后缀的 JSON 照常送达）；与 `--body` 互斥＝INVALID_ARGUMENT（exit 2）；
+/// 读取失败与超大小上限均 exit 2 且错误信息含路径。content-type 继承的
+/// 行为级验证：接口保存 xml 信封时覆写文本按 application/xml 发出（靶机
+/// Json 提取器 415 拒收），显式 `--header content-type` 恒最优先（201 恢复）。
+#[tokio::test(flavor = "multi_thread")]
+async fn api_run_body_file_sends_file_and_content_type_inherits_envelope() {
+    let server = demo_server::spawn_ephemeral().await.unwrap();
+    let dir = seeded_run_dir("run-body-file", &server.base_url()).await;
+
+    // 正常路径：.md 后缀的 JSON 内容嗅探 application/json，靶机接受 → 201
+    let payload_dir = temp_dir("run-body-file-payload");
+    let body_file = payload_dir.join("payload.md");
+    std::fs::write(
+        &body_file,
+        r#"{"name":"文件用户","email":"file@apilot.dev"}"#,
+    )
+    .unwrap();
+    let out = run_cli(
+        &[
+            "api",
+            "run",
+            "POST /api/users",
+            "--body-file",
+            &body_file.to_string_lossy(),
+            "--json",
+        ],
+        &dir,
+    );
+    assert_eq!(exit_code(&out), 0);
+    let value = assert_stdout_is_json_or_empty(&out).expect("应有 JSON 输出");
+    assert_eq!(
+        value["response"]["status"], 201,
+        "--body-file 全文作为请求体送达（嗅探 application/json）"
+    );
+
+    // xml 信封继承：接口保存 xml 信封 → 覆写文本按 application/xml 发出 →
+    // 靶机 Json 提取器拒收非 JSON 类型（415）
+    let ctx = AppContext::new(dir.clone()).await.unwrap();
+    sqlx::query(
+        "INSERT INTO endpoint_user_data (service_id, key, body, params, headers, updated_at) \
+         VALUES ('s1', 'POST /api/users', ?, '[]', '[]', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+    )
+    .bind(r#"{"kind":"xml","text":"<root/>"}"#)
+    .execute(&ctx.db.pool)
+    .await
+    .unwrap();
+    ctx.db.pool.close().await;
+    let out = run_cli(
+        &[
+            "api",
+            "run",
+            "POST /api/users",
+            "--body-file",
+            &body_file.to_string_lossy(),
+            "--json",
+        ],
+        &dir,
+    );
+    assert_eq!(exit_code(&out), 0, "415 属执行成功（成败判定交消费者）");
+    let value = assert_stdout_is_json_or_empty(&out).expect("应有 JSON 输出");
+    assert_eq!(
+        value["response"]["status"], 415,
+        "xml 信封继承：覆写 JSON 文本按 application/xml 发出"
+    );
+
+    // 显式头恒最优先：content-type=application/json 压过信封继承 → 201
+    let out = run_cli(
+        &[
+            "api",
+            "run",
+            "POST /api/users",
+            "--body-file",
+            &body_file.to_string_lossy(),
+            "--header",
+            "content-type=application/json",
+            "--json",
+        ],
+        &dir,
+    );
+    assert_eq!(exit_code(&out), 0);
+    let value = assert_stdout_is_json_or_empty(&out).expect("应有 JSON 输出");
+    assert_eq!(value["response"]["status"], 201, "显式头压过信封继承");
+
+    // --body 与 --body-file 同给 → INVALID_ARGUMENT（exit 2）
+    let out = run_cli(
+        &[
+            "api",
+            "run",
+            "POST /api/users",
+            "--body",
+            "{}",
+            "--body-file",
+            &body_file.to_string_lossy(),
+            "--json",
+        ],
+        &dir,
+    );
+    assert_eq!(exit_code(&out), 2);
+    let value = assert_stdout_is_json_or_empty(&out).expect("错误包络在 stdout");
+    assert_eq!(value["error"]["code"], "INVALID_ARGUMENT");
+
+    // 文件不存在 → exit 2 且错误信息含路径
+    let missing = payload_dir.join("nope.json");
+    let out = run_cli(
+        &[
+            "api",
+            "run",
+            "POST /api/users",
+            "--body-file",
+            &missing.to_string_lossy(),
+            "--json",
+        ],
+        &dir,
+    );
+    assert_eq!(exit_code(&out), 2);
+    let value = assert_stdout_is_json_or_empty(&out).expect("错误包络在 stdout");
+    assert_eq!(value["error"]["code"], "INVALID_ARGUMENT");
+    assert!(
+        value["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("nope.json"),
+        "错误信息含路径: {}",
+        value["error"]["message"]
+    );
+
+    // 超大小上限（16 MiB）→ exit 2；稀疏文件零成本构造超限逻辑长度
+    let big = payload_dir.join("big.bin");
+    let file = std::fs::File::create(&big).unwrap();
+    file.set_len(16 * 1024 * 1024 + 1).unwrap();
+    drop(file);
+    let out = run_cli(
+        &[
+            "api",
+            "run",
+            "POST /api/users",
+            "--body-file",
+            &big.to_string_lossy(),
+            "--json",
+        ],
+        &dir,
+    );
+    assert_eq!(exit_code(&out), 2);
+    let value = assert_stdout_is_json_or_empty(&out).expect("错误包络在 stdout");
+    assert_eq!(value["error"]["code"], "INVALID_ARGUMENT");
+}
+
+/// `--form` / `--form-file` 全链路：form-data 信封接口上行级覆写（文本行
+/// 同名替换、文件行覆写后 filename＝basename、mime 按扩展名推断——靶机
+/// /api/upload 回显元信息即观测面）；multipart Content-Type 由引擎自动带
+/// boundary（靶机解析成功即证明）。前提矩阵：urlencoded 信封＋`--form`
+/// 请求照常发出（默认补 urlencoded 头，靶机 Json 提取器 415＝执行成功）、
+/// ＋`--form-file` exit 2；json 信封与无保存 body＋`--form` 均 exit 2 且
+/// 错误信息指明 body 类型；与 `--body` 同给 exit 2。
+#[tokio::test(flavor = "multi_thread")]
+async fn api_run_form_flags_override_envelope_rows_and_guard_preconditions() {
+    let server = demo_server::spawn_ephemeral().await.unwrap();
+    let dir = seeded_run_dir("run-form", &server.base_url()).await;
+
+    // 补种 multipart 接口：POST /api/upload 保存 form-data 信封
+    // （文本行 note＋file 行 attach）
+    let ctx = AppContext::new(dir.clone()).await.unwrap();
+    sqlx::query(
+        "INSERT INTO endpoints (service_id, key, title, category_id, definition, created_at, badge, sort_order) \
+         VALUES ('s1', 'POST /api/upload', '上传', NULL, '{\"method\":\"POST\",\"path_template\":\"/api/upload\"}', \
+         strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), NULL, 0)",
+    )
+    .execute(&ctx.db.pool)
+    .await
+    .unwrap();
+    let payload_dir = temp_dir("run-form-payload");
+    let attach = payload_dir.join("photo.png");
+    std::fs::write(&attach, b"png-bytes-for-e2e").unwrap();
+    let replacement = payload_dir.join("id-card.png");
+    std::fs::write(&replacement, b"replacement-bytes").unwrap();
+    sqlx::query(
+        "INSERT INTO endpoint_user_data (service_id, key, body, params, headers, updated_at) \
+         VALUES ('s1', 'POST /api/upload', ?, '[]', '[]', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+    )
+    .bind(concat!(
+        r#"{"kind":"form-data","rows":["#,
+        r#"{"name":"note","value":"old-note"},"#,
+        r#"{"name":"attach","value":"C:\\e2e\\original.png","type":"file"}"#,
+        r#"]}"#
+    ))
+    .execute(&ctx.db.pool)
+    .await
+    .unwrap();
+    ctx.db.pool.close().await;
+
+    // 正常路径：文本行同名替换＋文件行覆写（filename＝basename、mime 按
+    // 扩展名推断）；multipart 解析成功（200）证明 Content-Type 自动带 boundary
+    let out = run_cli(
+        &[
+            "api",
+            "run",
+            "POST /api/upload",
+            "--form",
+            "note=new-note",
+            "--form-file",
+            &format!("attach={}", replacement.to_string_lossy()),
+            "--json",
+        ],
+        &dir,
+    );
+    assert_eq!(exit_code(&out), 0);
+    let value = assert_stdout_is_json_or_empty(&out).expect("应有 JSON 输出");
+    assert_eq!(value["response"]["status"], 200, "multipart 送达并解析成功");
+    let body = value["response"]["body"]["excerpt"].as_str().unwrap();
+    // 靶机对 multipart 文本字段只回 name＋size（不回内容）：size＝覆写值
+    // 的字节长度即文本行覆写送达的指纹
+    assert!(
+        body.contains(&format!(r#""name":"note","size":{}"#, "new-note".len())),
+        "文本行覆写生效（按 size 指纹）: {body}"
+    );
+    assert!(
+        body.contains("id-card.png"),
+        "文件行覆写后 filename＝basename: {body}"
+    );
+    assert!(body.contains("image/png"), "mime 按扩展名推断: {body}");
+    assert!(
+        !body.contains("old-note") && !body.contains("original.png"),
+        "同名行被覆写而非并存: {body}"
+    );
+
+    // 与 --body 同给 → INVALID_ARGUMENT（exit 2）
+    let out = run_cli(
+        &[
+            "api",
+            "run",
+            "POST /api/upload",
+            "--form",
+            "a=1",
+            "--body",
+            "{}",
+            "--json",
+        ],
+        &dir,
+    );
+    assert_eq!(exit_code(&out), 2);
+    let value = assert_stdout_is_json_or_empty(&out).expect("错误包络在 stdout");
+    assert_eq!(value["error"]["code"], "INVALID_ARGUMENT");
+
+    // urlencoded 信封：--form 文本行可用（请求照常发出；靶机 Json 提取器对
+    // urlencoded 体回 415，属执行成功 exit 0——默认头已补
+    // application/x-www-form-urlencoded）；--form-file 报 INVALID_ARGUMENT
+    let ctx = AppContext::new(dir.clone()).await.unwrap();
+    sqlx::query(
+        "INSERT INTO endpoint_user_data (service_id, key, body, params, headers, updated_at) \
+         VALUES ('s1', 'POST /api/users', ?, '[]', '[]', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+    )
+    .bind(r#"{"kind":"urlencoded","rows":[{"name":"a","value":"1"}]}"#)
+    .execute(&ctx.db.pool)
+    .await
+    .unwrap();
+    ctx.db.pool.close().await;
+    let out = run_cli(
+        &["api", "run", "POST /api/users", "--form", "a=2", "--json"],
+        &dir,
+    );
+    assert_eq!(
+        exit_code(&out),
+        0,
+        "urlencoded＋--form 请求发出（415 也算执行成功）"
+    );
+    let value = assert_stdout_is_json_or_empty(&out).expect("应有 JSON 输出");
+    assert_eq!(
+        value["response"]["status"], 415,
+        "urlencoded 体被 Json 提取器拒收"
+    );
+    let out = run_cli(
+        &[
+            "api",
+            "run",
+            "POST /api/users",
+            "--form-file",
+            &format!("f={}", attach.to_string_lossy()),
+            "--json",
+        ],
+        &dir,
+    );
+    assert_eq!(exit_code(&out), 2);
+    let value = assert_stdout_is_json_or_empty(&out).expect("错误包络在 stdout");
+    assert_eq!(value["error"]["code"], "INVALID_ARGUMENT");
+
+    // json 信封＋--form → exit 2，错误信息指明 body 类型不符
+    let ctx = AppContext::new(dir.clone()).await.unwrap();
+    sqlx::query(
+        "UPDATE endpoint_user_data SET body = ? WHERE service_id = 's1' AND key = 'POST /api/users'",
+    )
+    .bind(r#"{"kind":"json","text":"{}"}"#)
+    .execute(&ctx.db.pool)
+    .await
+    .unwrap();
+    ctx.db.pool.close().await;
+    let out = run_cli(
+        &["api", "run", "POST /api/users", "--form", "a=1", "--json"],
+        &dir,
+    );
+    assert_eq!(exit_code(&out), 2);
+    let value = assert_stdout_is_json_or_empty(&out).expect("错误包络在 stdout");
+    assert_eq!(value["error"]["code"], "INVALID_ARGUMENT");
+    assert!(
+        value["error"]["message"].as_str().unwrap().contains("json"),
+        "错误信息指明 body 类型: {}",
+        value["error"]["message"]
+    );
+
+    // 无保存 body（GET /api/users 用户数据无 body 列）＋--form → exit 2
+    let out = run_cli(
+        &["api", "run", "GET /api/users", "--form", "a=1", "--json"],
+        &dir,
+    );
+    assert_eq!(exit_code(&out), 2);
+    let value = assert_stdout_is_json_or_empty(&out).expect("错误包络在 stdout");
+    assert_eq!(value["error"]["code"], "INVALID_ARGUMENT");
+
+    // 文件字段指向不存在的文件 → 引擎打开失败 IO_OPEN_PATH_FAILED（exit 1；
+    // CLI 只传路径不预读文件，打开时机与错误码复用引擎既有能力）
+    let missing = payload_dir.join("ghost.png");
+    let out = run_cli(
+        &[
+            "api",
+            "run",
+            "POST /api/upload",
+            "--form-file",
+            &format!("attach={}", missing.to_string_lossy()),
+            "--json",
+        ],
+        &dir,
+    );
+    assert_eq!(exit_code(&out), 1);
+    let value = assert_stdout_is_json_or_empty(&out).expect("错误包络在 stdout");
+    assert_eq!(value["error"]["code"], "IO_OPEN_PATH_FAILED");
 }
 
 /// 裁剪回归：run 历史查询组已下架（Run Record 查询归 GUI History），

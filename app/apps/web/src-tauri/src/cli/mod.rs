@@ -558,7 +558,9 @@ mod tests {
         }
     }
 
-    /// `api run` 参数表静态断言：`--env` 移除后，覆写旗标集保持完整。
+    /// `api run` 参数表静态断言：`--env` 移除后，覆写旗标集保持完整
+    /// （`--body-file` 与 `--body` 同为请求体覆写通道、`--form`/`--form-file`
+    /// 为表单行级覆写通道，族间互斥在命令层校验）。
     #[test]
     fn api_run_argument_table_has_no_env_flag() {
         let cmd = Cli::command();
@@ -572,7 +574,17 @@ mod tests {
             .map(|a| a.get_id().as_str())
             .collect();
         assert!(!arg_ids.contains(&"env"), "--env 已随变量域收归 GUI 而移除");
-        for id in ["id", "service", "params", "queries", "headers", "body"] {
+        for id in [
+            "id",
+            "service",
+            "params",
+            "queries",
+            "headers",
+            "body",
+            "body_file",
+            "forms",
+            "form_files",
+        ] {
             assert!(arg_ids.contains(&id), "api run 缺参数 {id}");
         }
     }

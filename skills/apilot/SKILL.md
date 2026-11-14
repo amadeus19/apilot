@@ -45,8 +45,9 @@ An endpoint id is either its stable key — `"METHOD /path"` with a space, quote
 
 ## 5. Run an endpoint
 
-`apilot --json api run <id>` sends the request. Overrides are optional: `--param K=V` to replace path parameters, `--query K=V` to replace query values, `--header K=V` to replace headers (each may repeat), and `--body <json>` to replace the body entirely. Overrides are never saved back to the user's data.
+`apilot --json api run <id>` sends the request. Overrides are optional: `--param K=V` to replace path parameters, `--query K=V` to replace query values, `--header K=V` to replace headers (each may repeat), `--body <json>` to replace the body entirely, and `--body-file <path>` to replace the body with the full UTF-8 text of a local file (any extension; `{{...}}` variables resolve exactly like `--body`). `--body` and `--body-file` are mutually exclusive. For endpoints whose saved body is a form envelope, `--form K=V` replaces form fields by name and `--form-file K=<path>` replaces or adds a file field (multipart; the filename is the file's basename and the MIME type is inferred from the extension) — `--form` works for both multipart and urlencoded bodies, `--form-file` only for multipart; on any other body type both flags are rejected with exit 2. `--form`/`--form-file` are mutually exclusive with `--body`/`--body-file`. Overrides are never saved back to the user's data.
 
+- On PowerShell, prefer `--body-file` for request bodies: PowerShell strips the double quotes of inline JSON when it assembles the command line, so `--body` payloads arrive corrupted. Write the body to a local file and pass `--body-file <path>` instead.
 - The command exits 0 whenever a response arrives, including 4xx and 5xx. Read `response.status` and the body to judge the outcome.
 - The response body in the result is a truncated preview. Check `truncated` and `totalSize` before assuming you saw everything.
 - There is no timeout flag. The request uses the timeout configured in the app (unlimited by default), so wrap calls that might hang in the agent's own command timeout.
