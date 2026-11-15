@@ -18,5 +18,6 @@ pub mod system;
 pub mod tree;
 pub mod user_data;
 pub mod variable;
+pub mod window;
 pub mod workflow;
 pub mod workspace;

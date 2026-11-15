@@ -22,6 +22,10 @@ pub const LOCALE_KEY: &str = "locale";
 /// 关闭按钮行为键（值 `{ "action": "ask" | "tray" | "exit" }`；值校验在
 /// 前端 zod，Rust 只认键名做三分派宽松归档）
 pub const CLOSE_BEHAVIOR_KEY: &str = "closeBehavior";
+/// 快照窗几何记忆键（值 `{ x, y, width, height, alwaysOnTop }` 或 null；
+/// null＝从未记忆，建窗回退默认。纯记忆数据无旁路生效动作，宽容解析见
+/// services/snapshot_window）
+pub const RESPONSE_SNAPSHOT_WINDOW_KEY: &str = "responseSnapshotWindow";
 
 /// settings 内存缓存。启动灌入全量，此后与写操作保持同步。
 /// 锁中毒仅可能发生在持锁写入 panic 时；HashMap 不因中毒而损坏，
@@ -97,6 +101,9 @@ const EXACT_KEYS: &[&str] = &[
     // 关闭按钮行为（主窗口点 X / Alt+F4 的三分派决策键；Rust 侧无生效
     // 旁路——决策发生在 CloseRequested 现场读缓存，见 lib.rs 决策层）
     CLOSE_BEHAVIOR_KEY,
+    // 快照窗位置 / 尺寸 / 置顶记忆（上次几何态整体快照；写入由前端在
+    // onMoved / onResized / 置顶切换时经 set_setting 落库，建窗时读取）
+    RESPONSE_SNAPSHOT_WINDOW_KEY,
 ];
 
 /// 预留组前缀：`http.*`（写权限先放行，具体键语义由后续阶段定义）。
@@ -772,6 +779,39 @@ mod tests {
         );
         assert_eq!(cache.get("no.such.key"), None);
         // 无副作用键：落库即终态，不触发生效动作
+        assert!(host.log_levels().is_empty() && host.http_values().is_empty());
+    }
+
+    // —— responseSnapshotWindow 键（快照窗几何记忆数据面）——
+
+    #[tokio::test]
+    async fn response_snapshot_window_key_is_writable_and_single_key_readable() {
+        let pool = memory_pool().await;
+        let cache = SettingsCache::default();
+        let host = RecordingHost::default();
+        let value = json!({
+            "x": 100.0, "y": 200.0,
+            "width": 480.0, "height": 600.0,
+            "alwaysOnTop": true
+        });
+        // 白名单放行（未注册前该键写入会被 SETTINGS_UNKNOWN_KEY 拒绝）
+        set(
+            &host,
+            &pool,
+            &cache,
+            RESPONSE_SNAPSHOT_WINDOW_KEY,
+            value.clone(),
+        )
+        .await
+        .unwrap();
+        // 单键 get 直读缓存（建窗现场读取面）
+        assert_eq!(cache.get(RESPONSE_SNAPSHOT_WINDOW_KEY).unwrap(), value);
+        // 覆盖写（null＝清除记忆，前端契约的一部分）同样放行
+        set(&host, &pool, &cache, RESPONSE_SNAPSHOT_WINDOW_KEY, json!(null))
+            .await
+            .unwrap();
+        assert_eq!(cache.get(RESPONSE_SNAPSHOT_WINDOW_KEY).unwrap(), json!(null));
+        // 纯记忆键：无旁路生效动作
         assert!(host.log_levels().is_empty() && host.http_values().is_empty());
     }
 }

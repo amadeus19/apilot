@@ -1,7 +1,7 @@
 import * as React from 'react'
 
 import { save as saveFileDialog } from '@tauri-apps/plugin-dialog'
-import { SaveIcon, WrapTextIcon } from 'lucide-react'
+import { Loader2Icon, PictureInPicture2Icon, SaveIcon, WrapTextIcon } from 'lucide-react'
 
 import {
   Badge,
@@ -22,7 +22,9 @@ import { formatBytes, useI18n } from '@/i18n'
 import { reportError } from '@/services/error-center'
 import { toIpcError } from '@/services/ipc'
 import { selectResolvedTheme, useSettingsStore } from '@/stores/settings.store'
+import { useTabsStore } from '@/stores/tabs.store'
 import { useXmlFormat } from '@/features/workbench/use-xml-format'
+import { openResponseSnapshot } from '@/features/response-snapshot/snapshot-api'
 import {
   HTTP_BODY_EDITOR_MAX_CHARS,
   HTTP_MAX_RESPONSE_BYTES,
@@ -152,6 +154,8 @@ export function ResponseBodyPane({ result, tabId }: { result: RunResultDto; tabI
   const resolvedTheme = useSettingsStore(selectResolvedTheme)
   const mode = useResponseStore((s) => s.bodyModes[tabId] ?? 'pretty')
   const setBodyMode = useResponseStore((s) => s.setBodyMode)
+  // 悬浮快照的窗口标题：当前 Tab / 接口名（防御态空串）
+  const tabTitle = useTabsStore((s) => s.tabs.find((tab) => tab.id === tabId)?.title ?? '')
 
   // 换行开关（视图偏好，跨请求保持）：默认关——与请求区 Body 编辑同一
   // 默认口径；Monaco wordWrap 与 pre 态 whitespace-pre-wrap /
@@ -173,6 +177,9 @@ export function ResponseBodyPane({ result, tabId }: { result: RunResultDto; tabI
   // 文件档原始字节缓存（惰性拉取）：编码重解码 / Preview / 加载全量共用，
   // 内存档不经此态（rawBase64 就地可得）
   const [fileBytes, setFileBytes] = React.useState<BytesState>({ state: 'idle' })
+  // 悬浮快照在途态：建窗是 async command（含 WebView2 初始化，数百毫秒级），
+  // 按钮切 loading 图标给出「已受理」的即时反馈，落定恢复
+  const [snapshotPending, setSnapshotPending] = React.useState(false)
   if (seededRunId !== result.runId) {
     setSeededRunId(result.runId)
     setFull({ state: 'idle' })
@@ -373,6 +380,20 @@ export function ResponseBodyPane({ result, tabId }: { result: RunResultDto; tabI
     formattedJson !== null ? formattedJson : formattedXml !== null ? formattedXml : rawText
   const displayText = mode === 'pretty' ? prettyText : rawText
 
+  /** 悬浮快照：定格当前 Pretty 口径文本到独立小窗（不重复格式化，直接复用
+   * 上方格式化结果；contentType 随格式化成败判 json / text） */
+  const handleSnapshot = () => {
+    if (snapshotPending) return
+    setSnapshotPending(true)
+    openResponseSnapshot({
+      title: tabTitle,
+      content: prettyText,
+      contentType: formattedJson !== null ? 'json' : 'text',
+    })
+      .catch((err) => reportError(err))
+      .finally(() => setSnapshotPending(false))
+  }
+
   // Monaco 挂载条件（与当前 mode 无关：切 Raw 只隐藏层不卸载组件）：
   // json＝解析成功；xml（格式化在途先原文呈现，结果到达经 setValue 顶替）/
   // html＝未超上限；text＝恒等宽 pre
@@ -494,6 +515,23 @@ export function ResponseBodyPane({ result, tabId }: { result: RunResultDto; tabI
           <WrapTextIcon aria-hidden />
         </Button>
         <div className="ml-auto flex items-center gap-1.5">
+          {/* 悬浮查看：定格当前响应 Pretty 文本到独立快照小窗（body 为空禁用；
+              建窗在途切 loading 图标——首个反馈窗口，防「点了没反应」） */}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={t('response.snapshotButton')}
+            title={t('response.snapshotButtonHint')}
+            disabled={prettyText === '' || snapshotPending}
+            onClick={handleSnapshot}
+            data-testid="response-body-snapshot"
+          >
+            {snapshotPending ? (
+              <Loader2Icon aria-hidden className="animate-spin" />
+            ) : (
+              <PictureInPicture2Icon aria-hidden />
+            )}
+          </Button>
           {saveable && (
             <Button
               variant="ghost"

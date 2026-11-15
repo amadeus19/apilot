@@ -65,6 +65,15 @@ export type KeybindingsOverrides = Record<string, string | null>
 export type WorkflowPinsSetting = Record<string, string>
 /** settings 键 `http` 的代理段：mode＝none（默认）| custom（url 必填，Rust 侧写前校验） */
 export type HttpProxySetting = { mode: HttpProxyMode; url: string | null }
+/** settings 键 `responseSnapshotWindow`：响应快照小窗的位置尺寸与置顶
+ * 记忆（逻辑像素，与建窗侧同口径整体读写；null = 尚无记忆，建窗用默认几何） */
+export type ResponseSnapshotWindowSetting = {
+  x: number
+  y: number
+  width: number
+  height: number
+  alwaysOnTop: boolean
+}
 /** settings 键 `http`：全局 HTTP 行为（机器与网络语境，不随工作空间切换）。
  * timeoutSeconds：null＝不限制（默认）| 正整数秒（档位 10/30/60 由 UI 控件保证）；
  * redirect：跟随 3xx（上限固定 10）；tlsVerify：默认校验；
@@ -150,6 +159,16 @@ const httpSettingSchema: z.ZodType<Partial<HttpSetting>> = z.object({
   proxy: httpProxySettingSchema.optional(),
 })
 
+/** 快照小窗记忆整键（字段齐全才合法）：半对象整体判脏回 null，避免半
+ * 记忆被建窗侧部分采用造成几何漂移；数值不加整型约束（缩放换算可能带小数） */
+const responseSnapshotWindowSettingSchema: z.ZodType<ResponseSnapshotWindowSetting> = z.object({
+  x: z.number(),
+  y: z.number(),
+  width: z.number(),
+  height: z.number(),
+  alwaysOnTop: z.boolean(),
+})
+
 export const SETTINGS_DEFAULTS = {
   theme: { preference: 'system', accent: 'indigo' },
   locale: { preference: 'system' },
@@ -168,7 +187,8 @@ export const SETTINGS_DEFAULTS = {
     tlsVerify: true,
     proxy: { mode: 'none', url: null },
   },
-} as const satisfies Record<string, object>
+  responseSnapshotWindow: null,
+} as const satisfies Record<string, object | null>
 
 export type ParsedSettings = {
   theme: ThemeSetting
@@ -183,6 +203,7 @@ export type ParsedSettings = {
   keybindings: KeybindingsOverrides
   workflowPins: WorkflowPinsSetting
   http: HttpSetting
+  responseSnapshotWindow: ResponseSnapshotWindowSetting | null
   /** 解析失败的键（脏数据已回退默认，交由调用方上报） */
   invalidKeys: string[]
 }
@@ -226,6 +247,24 @@ function parseUpdateSource(value: unknown, invalidKeys: string[]): UpdateSourceS
     baseUrl: raw.baseUrl ?? null,
     mirrorPrefix: raw.mirrorPrefix ?? '',
   }
+}
+
+/**
+ * responseSnapshotWindow 专用解析：键值是「对象或 null」（null 本身是合法
+ * 的未定制态），不适配 parseOne 的对象默认值形态。缺失与 null 同义回 null；
+ * 存在但损坏（半对象 / 字段类型错）回 null 并登记。
+ */
+function parseResponseSnapshotWindow(
+  value: unknown,
+  invalidKeys: string[],
+): ResponseSnapshotWindowSetting | null {
+  if (value === undefined || value === null) return null
+  const result = responseSnapshotWindowSettingSchema.safeParse(value)
+  if (!result.success) {
+    invalidKeys.push('responseSnapshotWindow')
+    return null
+  }
+  return result.data
 }
 
 /**
@@ -318,6 +357,7 @@ export function parseSettings(raw: Record<string, unknown> | null | undefined): 
       SETTINGS_DEFAULTS.workflowPins,
       invalidKeys,
     ),
+    responseSnapshotWindow: parseResponseSnapshotWindow(raw.responseSnapshotWindow, invalidKeys),
     invalidKeys,
   }
 }

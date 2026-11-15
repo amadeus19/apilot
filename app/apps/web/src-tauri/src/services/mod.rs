@@ -16,6 +16,7 @@ pub mod service;
 pub mod service_import;
 pub mod session;
 pub mod settings;
+pub mod snapshot_window;
 pub mod sync_apply;
 pub mod sync_diff;
 pub mod sync_fetch;

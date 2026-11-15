@@ -24,7 +24,7 @@ const SNAPSHOT: Readonly<Record<string, readonly [count: number, hash: string]>>
   history: [29, 'd3991c5d4713c57d'],
   historyDetail: [22, '8b8471fe7208f397'],
   keybindings: [10, '5f169ca9f7c6937f'],
-  response: [83, 'ab7312084878a8e2'],
+  response: [89, 'a3b28a6ea53629b9'],
   settings: [188, '98aa0942720b2ebc'],
   shell: [47, '372be7472a286fcb'],
   statusBar: [6, '89d24b7f5affa6cb'],
@@ -284,8 +284,14 @@ const SNAPSHOT: Readonly<Record<string, readonly [count: number, hash: string]>>
  * 条目——三版本日期徽章键 3、v0.9.1 导语＋十条、v0.9.2 导语＋四条共 19 键
  * （169→188）；
  * 总键 1163→1182。
+ * 响应快照小窗（Body 工具栏悬浮触发＋独立窗口定格呈现）：response 域增
+ * snapshot 四键（悬浮动作/悬浮提示/置顶开关/空态文案，83→87）；
+ * 总键 1182→1186。
+ * 快照窗格式化与非法 JSON 短提示（2026-11-14）：response 域增
+ * snapshotFormat/snapshotFormatInvalid 两键（87→89）；
+ * 总键 1186→1188。
  */
-const TOTAL_KEYS = 1182
+const TOTAL_KEYS = 1188
 
 /** 与 core.ts lookup 同口径的叶子判定：string 或含 other 键的复数节点 */
 function walkKeys(node: unknown, prefix: string, out: string[]): void {

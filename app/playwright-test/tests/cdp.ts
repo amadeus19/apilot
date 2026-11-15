@@ -256,6 +256,17 @@ export function currentPage(): Page | null {
   return sharedPage
 }
 
+/**
+ * 枚举 CDP 侧全部页面 target（多窗口断言用）：Tauri 每个窗口各占一个
+ * target，同属 default context。主窗与快照窗共用同一 dev 入口（URL 同为
+ * localhost:5173），按 URL 无法区分——调用方按页面内容 data-testid 识别。
+ * 未连接时抛错（先经 ensureAppPage 建立连接）。
+ */
+export function cdpPages(): Page[] {
+  if (!browser) throw new Error('CDP 未连接：多窗口枚举前先经 ensureAppPage 建立连接')
+  return browser.contexts()[0]?.pages() ?? []
+}
+
 /** 测试钩子（beforeAll 等 fixture 不可用处）获取共享页面 */
 export async function ensureAppPage(): Promise<Page> {
   return ensurePage()

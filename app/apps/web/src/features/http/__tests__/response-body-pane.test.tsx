@@ -110,6 +110,10 @@ vi.mock('../http-api', async (importOriginal) => {
   return { ...actual, httpReadRange: readRangeMock }
 })
 
+// —— IPC invoke 替换：悬浮快照（open_response_snapshot）走桩，记录触发载荷 ——
+const invokeMock = vi.hoisted(() => vi.fn())
+vi.mock('@tauri-apps/api/core', () => ({ invoke: invokeMock }))
+
 const TAB_ID = 'endpoint:s1:e1'
 
 // 模块级 toast store 的用例间隔离（TTL 5s 内残留会与后续同名 toast 叠加）
@@ -119,6 +123,7 @@ function clearAllToasts(): void {
 
 beforeEach(() => {
   clearAllToasts()
+  invokeMock.mockReset().mockResolvedValue(undefined)
   monacoState.created.length = 0
   monacoState.create.mockClear()
   monacoState.setTheme.mockClear()
@@ -828,5 +833,65 @@ describe('编码选择器（按原始字节重解码）', () => {
       expect(pre).toHaveTextContent('中文')
     })
     expect(readRangeMock).toHaveBeenCalledWith(`http:tab:${TAB_ID}`, 0, GBK_ZHONGWEN.length)
+  })
+})
+
+describe('悬浮快照（Body 工具栏触发）', () => {
+  it('有响应体：点击定格当前 Pretty 口径文本（json 档、title＝Tab 名）', async () => {
+    const user = userEvent.setup()
+    renderPane('{"ok":true,"n":1}')
+    await screen.findByTestId('response-body-monaco')
+    await user.click(screen.getByRole('button', { name: '悬浮' }))
+    expect(invokeMock).toHaveBeenCalledWith('open_response_snapshot', {
+      payload: {
+        title: '接口',
+        content: '{\n  "ok": true,\n  "n": 1\n}',
+        contentType: 'json',
+      },
+    })
+  })
+
+  it('纯文本响应：contentType 随格式化成败判 text，内容为原文', async () => {
+    const user = userEvent.setup()
+    renderPane('plain text body')
+    await user.click(screen.getByRole('button', { name: '悬浮' }))
+    expect(invokeMock).toHaveBeenCalledWith('open_response_snapshot', {
+      payload: {
+        title: '接口',
+        content: 'plain text body',
+        contentType: 'text',
+      },
+    })
+  })
+
+  it('空响应体：按钮禁用不发起', async () => {
+    renderPane('')
+    expect(screen.getByRole('button', { name: '悬浮' })).toBeDisabled()
+  })
+
+  it('建窗在途：按钮切 loading 图标且禁用，落定恢复原图标', async () => {
+    const user = userEvent.setup()
+    let release: (() => void) | null = null
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'open_response_snapshot')
+        return new Promise<void>((resolve) => {
+          release = resolve
+        })
+      return Promise.resolve(undefined)
+    })
+    renderPane('{"ok":true}')
+    await screen.findByTestId('response-body-monaco')
+    const button = screen.getByRole('button', { name: '悬浮' })
+
+    await user.click(button)
+    // 在途：loading 旋转图标＋禁用（防重复触发）
+    expect(button.querySelector('svg.lucide-loader-circle')).toBeInTheDocument()
+    expect(button).toBeDisabled()
+
+    act(() => release?.())
+    await waitFor(() => {
+      expect(button.querySelector('svg.lucide-picture-in-picture-2')).toBeInTheDocument()
+    })
+    expect(button).toBeEnabled()
   })
 })

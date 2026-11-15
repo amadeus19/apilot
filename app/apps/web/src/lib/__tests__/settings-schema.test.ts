@@ -66,6 +66,20 @@ describe('parseSettings（Zod 校验）', () => {
     expect(broken.invalidKeys).toEqual(['logDir'])
   })
 
+  it('responseSnapshotWindow：null 与缺失同义（未定制），合法对象透传，半对象判脏回 null', () => {
+    expect(parseSettings({}).responseSnapshotWindow).toBeNull()
+    expect(parseSettings({ responseSnapshotWindow: null }).responseSnapshotWindow).toBeNull()
+    expect(
+      parseSettings({
+        responseSnapshotWindow: { x: 100, y: 50, width: 600, height: 400, alwaysOnTop: true },
+      }).responseSnapshotWindow,
+    ).toEqual({ x: 100, y: 50, width: 600, height: 400, alwaysOnTop: true })
+    // 半对象（缺字段）整体判脏：避免半记忆被建窗侧部分采用
+    const broken = parseSettings({ responseSnapshotWindow: { x: 100, alwaysOnTop: true } })
+    expect(broken.responseSnapshotWindow).toBeNull()
+    expect(broken.invalidKeys).toEqual(['responseSnapshotWindow'])
+  })
+
   it('updateSource：kind 判别模型全字段解析（folder 用 path，cloud 用 baseUrl/mirrorPrefix）', () => {
     expect(
       parseSettings({

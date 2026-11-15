@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { emit } from '@tauri-apps/api/event'
 
 import { reportError, setErrorLocaleSource } from '@/services/error-center'
 import { setDevMode as setIpcDevMode, setSetting } from '@/services/ipc'
@@ -14,8 +15,10 @@ import {
   type LogLevel,
   type ParsedSettings,
   type ResolvedLocale,
+  type ResponseSnapshotWindowSetting,
   type ResolvedTheme,
   type ThemePreference,
+  type ThemeSetting,
   type UpdateSourceSetting,
 } from '@/lib/settings-schema'
 /**
@@ -25,6 +28,18 @@ import {
  * **写失败不回滚 UI**（本次会话已生效），AppError 走统一上报，下次启动回退旧值。
  * system 态真值只走 Tauri（boot 载荷 / theme() / onThemeChanged），禁用 prefers-color-scheme。
  */
+
+/** 主题变更跨窗广播（事件名）：主窗 setter 发射、辅助窗口（响应快照窗）
+ * 监听后灌 store——各窗 WebView 独立 JS 上下文，store 不共享 */
+export const THEME_CHANGED_EVENT = 'settings://theme-changed'
+
+/** 广播主题写入（fire-and-forget：失败只影响辅窗本次跟随，不打断主窗写库
+ * 流程；辅窗下次重开仍按 boot 载荷取最新库值） */
+function broadcastThemeChange(theme: ThemeSetting): void {
+  void emit(THEME_CHANGED_EVENT, theme).catch(() => {
+    /* 辅窗不在场等场景静默 */
+  })
+}
 
 interface SystemTruth {
   systemTheme: ResolvedTheme | null
@@ -58,6 +73,9 @@ interface SettingsState extends ParsedSettings, SystemTruth {
   setWorkflowPin: (workspaceId: string, workflowId: string | null) => void
   /** HTTP 设置组局部补丁：整键写穿（Rust 写前校验＋EffectHost 重建 Client） */
   setHttp: (patch: Partial<HttpSetting>) => void
+  /** 响应快照小窗记忆整键写（位置尺寸与置顶一并整体落库，调用方负责
+   * 传实测完整值——快照窗的移动 / 缩放防抖与置顶切换共用此入口） */
+  setResponseSnapshotWindow: (setting: ResponseSnapshotWindowSetting) => void
   /** 删除覆盖恢复默认（行级传单 id、组级传组内全部 id） */
   resetKeybindings: (commandIds: string[]) => void
 }
@@ -100,12 +118,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const theme = { ...get().theme, preference }
     set({ theme })
     persist('theme', theme)
+    broadcastThemeChange(theme)
   },
 
   setAccent: (accent) => {
     const theme = { ...get().theme, accent }
     set({ theme })
     persist('theme', theme)
+    broadcastThemeChange(theme)
   },
 
   setLocalePreference: (preference) => {
@@ -155,6 +175,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const http = { ...get().http, ...patch }
     set({ http })
     persist('http', http)
+  },
+
+  setResponseSnapshotWindow: (setting) => {
+    set({ responseSnapshotWindow: setting })
+    persist('responseSnapshotWindow', setting)
   },
 
   setShellLeftPanelWidth: (width) => {

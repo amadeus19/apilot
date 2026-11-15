@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "APilot 最小权限集：窗口控制、主题、DevTools、os、dialog（日志目录选择与响应保存对话框）、opener（Rust 侧直调，不经前端 ACL）与 process restart（备份恢复暂存后的立即重启）",
+  "description": "主窗口权限集：窗口控制、主题、DevTools、os、dialog（日志目录选择与响应保存对话框）、opener（Rust 侧直调，不经前端 ACL）与 process restart（备份恢复暂存后的立即重启）。仅授权 main 窗——辅助窗口（响应快照窗等）各自持独立 capability 文件，按窗最小授权，不继承主窗全量权限",
   "windows": ["main"],
   "permissions": [
     "core:default",

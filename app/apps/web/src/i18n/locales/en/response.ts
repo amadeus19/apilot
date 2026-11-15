@@ -28,6 +28,13 @@ export const response = {
   backToPreview: 'Back to preview',
   sizeLimited: 'Full view is limited by size',
   toggleWrap: 'Word wrap',
+  // Floating snapshot window (triggered from the Body toolbar; freezes the current response in its own window)
+  snapshotButton: 'Float',
+  snapshotButtonHint: 'Freeze the current response in a separate window',
+  snapshotAlwaysOnTop: 'Always on top',
+  snapshotEmpty: 'No response content in this snapshot window',
+  snapshotFormat: 'Format',
+  snapshotFormatInvalid: 'Content is not valid JSON',
   // Sent request section (redaction)
   showSecrets: 'Show secrets',
   hideSecrets: 'Hide secrets',

@@ -55,6 +55,11 @@ pub struct AppState {
     /// 待安装更新包：install_update 校验后暂存，退出序列末尾 spawn
     /// （安装器覆盖 exe 必须发生在应用释放文件锁之后）
     pub install_request: std::sync::Mutex<Option<services::update_source::StagedUpdate>>,
+    /// 快照窗暂存 payload（单例替换语义）：`open_response_snapshot` 写入、
+    /// 快照窗页面经 `get_response_snapshot` 拉取。进程内存态，随进程退出
+    /// 释放；快照窗销毁不清除（下次 open 覆盖）
+    pub response_snapshot:
+        std::sync::Mutex<Option<services::snapshot_window::ResponseSnapshotPayload>>,
 }
 
 /// 从 settings 缓存构建 HttpService（boot 侧唯一构建入口，GUI / CLI 共用）：
@@ -351,6 +356,7 @@ pub fn run() {
         data_dir: app_data_dir.clone(),
         devtools_native,
         install_request: std::sync::Mutex::new(None),
+        response_snapshot: std::sync::Mutex::new(None),
       });
       // 日志运行期巡检（registry 常驻任务，shutdown 统一取消）：目录会话内
       // 固定（日志目录切换重启生效），启动期已清过一轮，先睡后清。
@@ -370,14 +376,18 @@ pub fn run() {
       Ok(())
     })
     .on_window_event(|window, event| {
-      // 关窗统一接管：点 X / Alt+F4 / win.close() 同路进入 CloseRequested。
-      // 单窗口假设：应用只有主窗口，关闭请求不按窗口 label 分流，一律交
-      // 决策层按 closeBehavior 三分派（ask 询问 / tray 隐藏到托盘 / exit
-      // 经退出闸门进入退出序列）。
+      // 关窗按窗口 label 分流（决策纯函数见 services::snapshot_window）：
+      // 主窗口统一接管——点 X / Alt+F4 / win.close() 同路进入
+      // CloseRequested，拦截默认销毁后交决策层按 closeBehavior 三分派
+      // （ask 询问 / tray 隐藏到托盘 / exit 经退出闸门进入退出序列）。
       // 拦截默认销毁：不 prevent_close 则窗口即刻销毁 → ExitRequested →
       // 进程退出与退出序列竞速（有任务时事件循环必赢，序列失去完成保证）；
-      // ask / tray 两分支本就要求窗口存活
-      if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+      // ask / tray 两分支本就要求窗口存活。
+      // 快照窗等辅助窗口放行系统默认销毁：关闭即销毁窗口本体，不触发
+      // 主窗三分派与退出序列（暂存随下次 open 覆盖，无需在此清理）
+      if let tauri::WindowEvent::CloseRequested { api, .. } = event
+        && services::snapshot_window::should_intercept_close(window.label())
+      {
         use tauri::Manager;
 
         api.prevent_close();
@@ -502,6 +512,9 @@ pub fn run() {
       commands::backup::backup_export,
       commands::backup::backup_validate,
       commands::backup::backup_restore,
+      // 快照窗域（响应定格快照：暂存＋建窗/复用聚焦，与暂存读取）
+      commands::window::open_response_snapshot,
+      commands::window::get_response_snapshot,
     ])
     .build(tauri::generate_context!())
     .expect("error while building tauri application")

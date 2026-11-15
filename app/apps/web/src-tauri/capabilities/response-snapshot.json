@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "response-snapshot",
+  "description": "响应快照小窗的最小权限集：窗口事件监听与状态查询（core:default）、首帧显示（show，配合隐藏创建的防闪协议）、自绘标题栏拖拽与关闭、置顶切换。不授 os / dialog / opener / process 等主窗专属能力——辅助窗口按需最小授权",
+  "windows": ["response-snapshot"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-show",
+    "core:window:allow-start-dragging",
+    "core:window:allow-close",
+    "core:window:allow-set-always-on-top"
+  ]
+}

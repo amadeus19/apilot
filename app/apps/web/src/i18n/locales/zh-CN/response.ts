@@ -28,6 +28,13 @@ export const response = {
   backToPreview: '回到预览',
   sizeLimited: '全量查看受大小限制',
   toggleWrap: '自动换行',
+  // 悬浮快照小窗（Body 工具栏触发，独立窗口定格当前响应）
+  snapshotButton: '悬浮',
+  snapshotButtonHint: '在新窗口中定格当前响应',
+  snapshotAlwaysOnTop: '置顶',
+  snapshotEmpty: '快照窗暂无响应内容',
+  snapshotFormat: '格式化',
+  snapshotFormatInvalid: '内容不是合法 JSON',
   // 已发送请求分区（脱敏）
   showSecrets: '显示敏感值',
   hideSecrets: '隐藏敏感值',
