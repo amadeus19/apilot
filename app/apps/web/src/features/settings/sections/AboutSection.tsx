@@ -17,9 +17,8 @@ type ChangelogType = 'new' | 'improved' | 'fixed'
 /** 单条 changelog 条目：类型徽章＋条目文案键 */
 type ChangelogItem = { type: ChangelogType; itemKey: DictKey }
 
-/** 一个版本的卡片数据：版本号（v 前缀）＋发布徽章文案键（日期 YYYY-MM，
- * 未发布版本为「待发布」占位键）＋导语键（0.9.1 起导语为双语两行，
- * 换行经 whitespace-pre-line 渲染）＋条目列表 */
+/** 一个版本的卡片数据：版本号（v 前缀）＋发布徽章文案键（日期 YYYY-MM）
+ * ＋导语键（0.9.1 起导语为双语两行，换行经 whitespace-pre-line 渲染）＋条目列表 */
 type ChangelogVersion = {
   version: string
   dateKey: DictKey
@@ -36,8 +35,9 @@ const CHANGELOG: ReadonlyArray<ChangelogVersion> = [
     items: [
       { type: 'new', itemKey: 'settings.changelogV092Item1' },
       { type: 'new', itemKey: 'settings.changelogV092Item2' },
-      { type: 'fixed', itemKey: 'settings.changelogV092Item3' },
+      { type: 'new', itemKey: 'settings.changelogV092Item3' },
       { type: 'fixed', itemKey: 'settings.changelogV092Item4' },
+      { type: 'fixed', itemKey: 'settings.changelogV092Item5' },
     ],
   },
   {

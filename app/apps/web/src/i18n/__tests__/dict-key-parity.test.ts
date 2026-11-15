@@ -25,7 +25,7 @@ const SNAPSHOT: Readonly<Record<string, readonly [count: number, hash: string]>>
   historyDetail: [22, '8b8471fe7208f397'],
   keybindings: [10, '5f169ca9f7c6937f'],
   response: [89, 'a3b28a6ea53629b9'],
-  settings: [188, '98aa0942720b2ebc'],
+  settings: [189, '379f330acf983cf9'],
   shell: [47, '372be7472a286fcb'],
   statusBar: [6, '89d24b7f5affa6cb'],
   sync: [59, 'da3dd1c45b8586c0'],
@@ -290,8 +290,11 @@ const SNAPSHOT: Readonly<Record<string, readonly [count: number, hash: string]>>
  * 快照窗格式化与非法 JSON 短提示（2026-11-14）：response 域增
  * snapshotFormat/snapshotFormatInvalid 两键（87→89）；
  * 总键 1186→1188。
+ * 0.9.2 changelog 定稿（2026-11-15）：settings 域增快照窗条目
+ * changelogV092Item5 一键（188→189）；
+ * 总键 1188→1189。
  */
-const TOTAL_KEYS = 1188
+const TOTAL_KEYS = 1189
 
 /** 与 core.ts lookup 同口径的叶子判定：string 或含 other 键的复数节点 */
 function walkKeys(node: unknown, prefix: string, out: string[]): void {

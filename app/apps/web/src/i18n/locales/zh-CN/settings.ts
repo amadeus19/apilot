@@ -219,16 +219,19 @@ export const settings = {
   changelogV091Item9: '防双开：重复启动不再开启第二个实例，自动唤起已有窗口。',
   changelogV091Item10:
     '工作空间认证（Bearer Token）默认占位由 {{access_token}} 改为 {{access-token}}（仅影响新创建的工作空间；已创建的工作空间不受影响）。',
-  // v0.9.2 条目预写本批 CLI 四项；日期为待发布占位，发布时与终稿一并定版
-  changelogV092Date: '待发布',
+  // v0.9.2 条目与本版 release 说明同源（新增 3：CLI 旗标 / skill 指引 / 响应快照窗，
+  // 修复 2：工作空间贯通 / content-type 继承），键序＝徽章分组排列
+  changelogV092Date: '2026-11',
   changelogV092Intro:
-    '0.9.1 发布后聚焦 CLI 与脚本集成的功能批次。\nFeature batch focused on CLI and scripting integration after v0.9.1.',
+    '0.9.1 发布后聚焦 CLI 集成与响应快照窗的功能批次。\nFeature batch focused on CLI integration and the response snapshot window after v0.9.1.',
   changelogV092Item1:
     'CLI 请求体旗标：apilot api run 新增 --body-file（从文件读取请求体，语义与 --body 一致）与 --form / --form-file（表单文本字段与文件上传的行级覆写），长请求体与 multipart 场景不再依赖终端行内转义。',
   changelogV092Item2:
     'Agent skill PowerShell 指引：附带的 Agent skill 补充 PowerShell 下的引号指引——内联 JSON 的双引号在 PowerShell 中会被剥离，请求体优先写入本地文件走 --body-file，编码代理在 PowerShell 中也能正确拼出命令。',
   changelogV092Item3:
-    'CLI 工作空间指定：--workspace 指定空间时，接口定位、base_url、变量与认证全链改从指定空间取数（原先仅接口查找用指定空间，发送装配仍按当前空间，两者不同时会请求发错目标）。',
+    '响应快照窗：响应 Body 工具栏新增「悬浮」，把当前响应弹成独立置顶小窗——Monaco 编辑器带行号与层级折叠，内容可编辑、可一键格式化 JSON；快照为弹出时的定格副本不随主窗变化，再次悬浮复用同一窗口并替换内容；置顶可切换、位置大小记忆、主题跟随主窗，主窗隐藏到托盘时保持显示。',
   changelogV092Item4:
+    'CLI 工作空间指定：--workspace 指定空间时，接口定位、base_url、变量与认证全链改从指定空间取数（原先仅接口查找用指定空间，发送装配仍按当前空间，两者不同时会请求发错目标）。',
+  changelogV092Item5:
     'CLI 请求体类型：--body / --body-file 覆写请求体时，Content-Type 自动继承接口保存的请求体类型（json/xml/text/urlencoded 各自映射，multipart 边界由引擎生成），接口未保存请求体时才按内容嗅探（如 XML 接口的覆写请求体不再被当作纯文本发送）。',
 } as const

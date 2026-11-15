@@ -231,17 +231,20 @@ export const settings = {
     'Single instance: launching again no longer opens a second instance; the existing window is brought up instead.',
   changelogV091Item10:
     'The workspace auth (Bearer Token) default placeholder changed from {{access_token}} to {{access-token}} (affects newly created workspaces only; existing workspaces are unaffected).',
-  // v0.9.2 entries pre-written for this batch's CLI items; date is an
-  // unreleased placeholder, finalized together with the release notes
-  changelogV092Date: 'Unreleased',
+  // v0.9.2 entries share the release notes of this version (3 new: CLI flags /
+  // skill guide / response snapshot window, 2 fixed: workspace resolution /
+  // content-type inheritance); key order groups entries by badge type
+  changelogV092Date: '2026-11',
   changelogV092Intro:
-    '0.9.1 发布后聚焦 CLI 与脚本集成的功能批次。\nFeature batch focused on CLI and scripting integration after v0.9.1.',
+    '0.9.1 发布后聚焦 CLI 集成与响应快照窗的功能批次。\nFeature batch focused on CLI integration and the response snapshot window after v0.9.1.',
   changelogV092Item1:
     'CLI body flags: apilot api run gains --body-file (reads the request body from a file, same semantics as --body) and --form / --form-file (line-level overrides for form text fields and file uploads); long bodies and multipart no longer depend on inline terminal escaping.',
   changelogV092Item2:
     'Agent skill PowerShell guide: the bundled Agent skill adds quoting guidance for PowerShell — inline JSON double quotes get stripped there, so request bodies should prefer a local file via --body-file, letting coding agents build correct commands in PowerShell.',
   changelogV092Item3:
-    'CLI workspace selection: with --workspace set, endpoint lookup, base_url, variables and auth now all resolve from the selected workspace (previously only endpoint lookup used it while the send chain still assembled from the current workspace, so requests could hit the wrong target when the two differed).',
+    'Response snapshot window: the response body toolbar gains a "Float" action that pops the current response into a separate always-on-top window; content renders in a Monaco editor with line numbers and folding, editable with one-click JSON formatting; the snapshot is a fixed copy of the moment it was popped, and floating again reuses the same window with the new content; always-on-top toggles, position and size are remembered, the theme follows the main window, and it stays visible when the main window hides to the tray.',
   changelogV092Item4:
+    'CLI workspace selection: with --workspace set, endpoint lookup, base_url, variables and auth now all resolve from the selected workspace (previously only endpoint lookup used it while the send chain still assembled from the current workspace, so requests could hit the wrong target when the two differed).',
+  changelogV092Item5:
     "CLI body content type: when --body / --body-file overrides the request body, Content-Type now inherits the endpoint's saved body type (json/xml/text/urlencoded each mapped; multipart boundaries are engine-generated); content sniffing applies only when the endpoint has no saved body (e.g. an XML endpoint's overridden body is no longer sent as plain text).",
 } as const
